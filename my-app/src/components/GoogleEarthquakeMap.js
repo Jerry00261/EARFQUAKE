@@ -1,26 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuraCanvas from './AuraCanvas';
-import { useGoogleMapsApi } from '../hooks/useGoogleMapsApi';
-
-const DEFAULT_CENTER = { lat: 33.92, lng: -117.97 };
-
-const MAP_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#1c2a3a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9bb8' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#141e2e' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2e4058' }] },
-  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e2e40' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a3028' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243446' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a2636' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2c3e52' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1e2e40' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#111c2a' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a6480' }] },
-];
 
 function findIntersectingEarthquake(event, container, overlay, earthquakes) {
   if (!event.domEvent || !container || !overlay?.getProjection?.() || !window.google?.maps) {
@@ -59,9 +38,15 @@ function findIntersectingEarthquake(event, container, overlay, earthquakes) {
 }
 
 function GoogleEarthquakeMap({
+  map,
+  overlay,
+  overlayReady,
+  mapNode,
   earthquakes,
   hoveredId,
   loading,
+  mapApiStatus,
+  mapApiError,
   minMag,
   onHover,
   onMinMagChange,
@@ -71,22 +56,29 @@ function GoogleEarthquakeMap({
   selectedEarthquake,
   selectedId,
   selectedYear,
+  streetViewActive,
+  onStreetViewChange,
   totalEventCount,
 }) {
-  const { status, error } = useGoogleMapsApi();
-  const mapNodeRef = useRef(null);
-  const mapRef = useRef(null);
-  const overlayRef = useRef(null);
   const listenersRef = useRef([]);
-  const [streetViewActive, setStreetViewActive] = useState(false);
   const latestStateRef = useRef({
     earthquakes,
     onHover,
     onSelect,
   });
-  const [overlayReady, setOverlayReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const playIntervalRef = useRef(null);
+  const [draggingYear, setDraggingYear] = useState(null);
+  const [yearInput, setYearInput] = useState(String(selectedYear));
+  const isDragging = draggingYear != null;
+  const displayYear = isDragging ? draggingYear : selectedYear;
+
+  // Keep text input in sync when selectedYear changes externally
+  useEffect(() => {
+    if (!isDragging) {
+      setYearInput(String(selectedYear));
+    }
+  }, [selectedYear, isDragging]);
 
   const togglePlay = useCallback(() => {
     setPlaying((prev) => !prev);
@@ -98,7 +90,7 @@ function GoogleEarthquakeMap({
         onYearChange((prev) => {
           if (prev >= 2026) {
             setPlaying(false);
-            return 2000;
+            return 1932;
           }
           return prev + 1;
         });
@@ -117,71 +109,31 @@ function GoogleEarthquakeMap({
     };
   }, [earthquakes, onHover, onSelect]);
 
+  // Street view verified-drop listener
   useEffect(() => {
-    if (status !== 'loaded' || mapRef.current || !mapNodeRef.current) {
-      return undefined;
-    }
-
-    const map = new window.google.maps.Map(mapNodeRef.current, {
-      center: DEFAULT_CENTER,
-      zoom: 8,
-      minZoom: 6,
-      maxZoom: 13,
-      disableDefaultUI: true,
-      streetViewControl: true,
-      clickableIcons: false,
-      gestureHandling: 'greedy',
-      backgroundColor: '#1c2a3a',
-      styles: MAP_STYLES,
-    });
-
-    const overlay = new window.google.maps.OverlayView();
-    overlay.onAdd = () => {};
-    overlay.draw = () => {
-      setOverlayReady(true);
-    };
-    overlay.onRemove = () => {
-      setOverlayReady(false);
-    };
-    overlay.setMap(map);
-
-    map.setOptions({
-      streetViewControlOptions: {
-        position: window.google.maps.ControlPosition.LEFT_BOTTOM,
-      },
-    });
-
-    mapRef.current = map;
-    overlayRef.current = overlay;
+    if (!map) return;
 
     const sv = map.getStreetView();
     const svService = new window.google.maps.StreetViewService();
-
-    // Restrict to outdoor imagery only
-    sv.setOptions({
-      source: window.google.maps.StreetViewSource.OUTDOOR,
-    });
+    sv.setOptions({ source: window.google.maps.StreetViewSource.OUTDOOR });
 
     let svVerified = false;
 
-    sv.addListener('visible_changed', () => {
+    const listener = sv.addListener('visible_changed', () => {
       const visible = sv.getVisible();
 
       if (visible && !svVerified) {
-        // Immediately hide before the user sees anything
         sv.setVisible(false);
 
         const dropPos = sv.getPosition();
         if (!dropPos) return;
 
-        // Find nearest panorama within 50m — reject if too far for accuracy
         svService.getPanorama(
           { location: dropPos, radius: 50, source: window.google.maps.StreetViewSource.OUTDOOR },
           (data, svStatus) => {
             if (svStatus === window.google.maps.StreetViewStatus.OK) {
               svVerified = true;
               const panoLatLng = data.location.latLng;
-              // Compute heading from panorama to the actual drop point
               const heading = window.google.maps.geometry
                 ? window.google.maps.geometry.spherical.computeHeading(panoLatLng, dropPos)
                 : 0;
@@ -193,61 +145,50 @@ function GoogleEarthquakeMap({
         );
       } else if (visible && svVerified) {
         svVerified = false;
-        setStreetViewActive(true);
+        onStreetViewChange(true);
       } else if (!visible) {
         svVerified = false;
-        setStreetViewActive(false);
+        onStreetViewChange(false);
       }
     });
 
-    return () => {
-      listenersRef.current.forEach((listener) => listener.remove());
-      listenersRef.current = [];
+    return () => listener.remove();
+  }, [map, onStreetViewChange]);
 
-      if (overlayRef.current) {
-        overlayRef.current.setMap(null);
-        overlayRef.current = null;
-      }
-
-      if (mapRef.current) {
-        window.google.maps.event.clearInstanceListeners(mapRef.current);
-        mapRef.current = null;
-      }
-    };
-  }, [status]);
-
+  // Resize on panel toggle
   useEffect(() => {
-    if (!mapRef.current) return;
-    // Trigger a resize so Google Maps recalculates controls after the container changes size
-    window.google.maps.event.trigger(mapRef.current, 'resize');
-  }, [panelOpen]);
+    if (map) {
+      window.google.maps.event.trigger(map, 'resize');
+    }
+  }, [map, panelOpen]);
 
+  // Click/hover listeners
   useEffect(() => {
-    if (!mapRef.current || !overlayRef.current) {
+    if (!map || !overlay) {
       return undefined;
     }
 
     listenersRef.current.forEach((listener) => listener.remove());
 
     listenersRef.current = [
-      mapRef.current.addListener('mousemove', (event) => {
+      map.addListener('mousemove', (event) => {
         const activeQuake = findIntersectingEarthquake(
           event,
-          mapNodeRef.current,
-          overlayRef.current,
+          mapNode,
+          overlay,
           latestStateRef.current.earthquakes
         );
 
         latestStateRef.current.onHover(activeQuake?.id ?? null);
       }),
-      mapRef.current.addListener('mouseout', () => {
+      map.addListener('mouseout', () => {
         latestStateRef.current.onHover(null);
       }),
-      mapRef.current.addListener('click', (event) => {
+      map.addListener('click', (event) => {
         const activeQuake = findIntersectingEarthquake(
           event,
-          mapNodeRef.current,
-          overlayRef.current,
+          mapNode,
+          overlay,
           latestStateRef.current.earthquakes
         );
 
@@ -265,21 +206,21 @@ function GoogleEarthquakeMap({
       listenersRef.current.forEach((listener) => listener.remove());
       listenersRef.current = [];
     };
-  }, [overlayReady]);
+  }, [map, overlay, mapNode, overlayReady]);
 
   useEffect(() => {
-    if (!mapRef.current || !selectedEarthquake) {
+    if (!map || !selectedEarthquake) {
       return;
     }
 
-    mapRef.current.panTo({
+    map.panTo({
       lat: selectedEarthquake.lat,
       lng: selectedEarthquake.lng,
     });
-  }, [selectedEarthquake]);
+  }, [map, selectedEarthquake]);
 
   const mapStatusMessage = useMemo(() => {
-    if (status === 'missing-key') {
+    if (mapApiStatus === 'missing-key') {
       return {
         title: 'Google Maps key needed',
         body:
@@ -287,14 +228,14 @@ function GoogleEarthquakeMap({
       };
     }
 
-    if (status === 'error') {
+    if (mapApiStatus === 'error') {
       return {
         title: 'Map engine unavailable',
-        body: error || 'The Google Maps script could not be loaded.',
+        body: mapApiError || 'The Google Maps script could not be loaded.',
       };
     }
 
-    if (loading || status === 'loading') {
+    if (loading || mapApiStatus === 'loading') {
       return {
         title: 'Loading map engine',
         body: 'Booting the basemap, animation overlay, and interaction layer.',
@@ -302,18 +243,16 @@ function GoogleEarthquakeMap({
     }
 
     return null;
-  }, [error, loading, status]);
+  }, [mapApiError, loading, mapApiStatus]);
 
   return (
-    <div className={`map-stage${streetViewActive ? ' streetview-active' : ''}`}>
-      <div className="map-canvas" ref={mapNodeRef} />
-
-      {status === 'loaded' && overlayReady && !streetViewActive ? (
+    <>
+      {map && overlay && overlayReady && !streetViewActive ? (
         <AuraCanvas
           earthquakes={earthquakes}
           hoveredId={hoveredId}
-          map={mapRef.current}
-          overlay={overlayRef.current}
+          map={map}
+          overlay={overlay}
           selectedId={selectedId}
         />
       ) : null}
@@ -321,7 +260,7 @@ function GoogleEarthquakeMap({
       {!streetViewActive && (
         <div className="map-overlay">
         <div className="map-badge">
-          <h1>Earthquake Visualization Dashboard</h1>
+          <h1>Explorer</h1>
           <p>
             Click an epicenter to inspect its magnitude, coordinates,
             and event details.
@@ -377,18 +316,51 @@ function GoogleEarthquakeMap({
             </button>
             <label>Year</label>
           </div>
-          <span className="year-value">{selectedYear}</span>
+          <input
+            className="year-text-input"
+            type="text"
+            inputMode="numeric"
+            value={isDragging ? String(draggingYear) : yearInput}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+              setYearInput(raw);
+            }}
+            onBlur={() => {
+              const n = Number(yearInput);
+              if (n >= 1932 && n <= 2026) {
+                onYearChange(n);
+              } else {
+                setYearInput(String(selectedYear));
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.target.blur();
+              }
+            }}
+          />
         </div>
         <input
           type="range"
-          min={2000}
+          min={1932}
           max={2026}
           step={1}
-          value={selectedYear}
-          onChange={(e) => onYearChange(Number(e.target.value))}
+          value={displayYear}
+          onChange={(e) => setDraggingYear(Number(e.target.value))}
+          onPointerUp={(e) => {
+            const val = Number(e.target.value);
+            setDraggingYear(null);
+            onYearChange(val);
+          }}
+          onKeyUp={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              onYearChange(displayYear);
+              setDraggingYear(null);
+            }
+          }}
         />
         <div className="year-slider-bounds">
-          <span>2000</span>
+          <span>1932</span>
           <span>2026</span>
         </div>
 
@@ -412,7 +384,7 @@ function GoogleEarthquakeMap({
         </div>
       </div>
       )}
-    </div>
+    </>
   );
 }
 
