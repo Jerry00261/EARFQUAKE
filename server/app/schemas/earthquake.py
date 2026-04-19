@@ -1,33 +1,24 @@
+from pydantic import BaseModel
 from datetime import datetime
 
-from pydantic import BaseModel
-
-
 class EarthquakeResponse(BaseModel):
-    id: str
-    magnitude: float | None = None
-    place: str | None = None
-    original_place: str | None = None
-    time: datetime | None = None
-    updated: datetime | None = None
-    title: str | None = None
-    url: str | None = None
-    status: str | None = None
-    mag_type: str | None = None
-    event_type: str | None = None
-    longitude: float | None = None
-    latitude: float | None = None
-    depth: float | None = None
-
+    id:         int
+    time:       datetime
+    lat:        float
+    lon:        float
+    depth:      float
+    mag:        float
+    mmi:        float | None
+    sig:        float | None
+    vs30:       float
+    site_class: str
 
 class EarthquakeListResponse(BaseModel):
     count: int
     items: list[EarthquakeResponse]
 
-
 class EarthquakeSummaryResponse(BaseModel):
-    total_earthquakes: int
-    max_magnitude: float | None = None
-    average_magnitude: float | None = None
-    latest_earthquake_id: str | None = None
-    latest_earthquake_time: datetime | None = None
+    total_earthquakes:      int
+    max_magnitude:          float | None
+    average_magnitude:      float | None
+    latest_earthquake_time: datetime | None
