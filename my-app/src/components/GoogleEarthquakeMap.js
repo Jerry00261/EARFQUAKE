@@ -71,6 +71,7 @@ function GoogleEarthquakeMap({
   selectedEarthquake,
   selectedId,
   selectedYear,
+  totalEventCount,
 }) {
   const { status, error } = useGoogleMapsApi();
   const mapNodeRef = useRef(null);
@@ -364,6 +365,7 @@ function GoogleEarthquakeMap({
 
       {!streetViewActive && (
       <div className="year-slider-container">
+        <div className="earthquake-count">{totalEventCount} event{totalEventCount !== 1 ? 's' : ''} ({earthquakes.length} location{earthquakes.length !== 1 ? 's' : ''})</div>
         <div className="year-slider-header">
           <div className="year-slider-left">
             <button
