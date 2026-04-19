@@ -11,8 +11,10 @@ import DashboardPanel from './components/DashboardPanel';
 import GoogleEarthquakeMap from './components/GoogleEarthquakeMap';
 import SeismicRiskMap from './components/SeismicRiskMap';
 import PredictionPanel from './components/PredictionPanel';
+import StateAnalyticsPanel from './components/StateAnalyticsPanel';
 import { useGoogleMapsApi } from './hooks/useGoogleMapsApi';
 import {
+  getAllEarthquakes,
   getEarthquakes,
   getLocationHistory,
   getLocationYearEvents,
@@ -82,6 +84,12 @@ function App() {
   const seekIdRef = useRef(0);
   const seismicDataLoadedRef = useRef(false);
   const lastPredictCoordsRef = useRef(null);
+
+  // --- State analytics ---
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [allEarthquakes, setAllEarthquakes] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const analyticsLoadedRef = useRef(false);
 
   // --- Create shared map once ---
   useEffect(() => {
@@ -372,6 +380,23 @@ function App() {
     setSeekTarget({ frame, id: seekIdRef.current });
   }, []);
 
+  const handleToggleAnalytics = useCallback(() => {
+    setAnalyticsOpen((prev) => {
+      const opening = !prev;
+      if (opening && !analyticsLoadedRef.current) {
+        setAnalyticsLoading(true);
+        getAllEarthquakes()
+          .then((data) => {
+            setAllEarthquakes(data);
+            analyticsLoadedRef.current = true;
+          })
+          .catch((err) => console.error('Analytics load error:', err))
+          .finally(() => setAnalyticsLoading(false));
+      }
+      return opening;
+    });
+  }, []);
+
   const currentPanelOpen = activeView === 'explorer' ? panelOpen : seismicPanelOpen;
 
   return (
@@ -481,6 +506,24 @@ function App() {
           />
         )}
       </div>
+
+      {activeView === 'explorer' && !streetViewActive && (
+        <button
+          className="state-analytics-toggle"
+          type="button"
+          onClick={handleToggleAnalytics}
+        >
+          {analyticsOpen ? 'Close Analytics' : 'State Analytics'}
+        </button>
+      )}
+
+      {analyticsOpen && (
+        <StateAnalyticsPanel
+          earthquakes={allEarthquakes}
+          loading={analyticsLoading}
+          onClose={handleToggleAnalytics}
+        />
+      )}
     </div>
   );
 }

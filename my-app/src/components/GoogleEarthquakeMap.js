@@ -68,6 +68,17 @@ function GoogleEarthquakeMap({
   });
   const [playing, setPlaying] = useState(false);
   const playIntervalRef = useRef(null);
+  const [draggingYear, setDraggingYear] = useState(null);
+  const [yearInput, setYearInput] = useState(String(selectedYear));
+  const isDragging = draggingYear != null;
+  const displayYear = isDragging ? draggingYear : selectedYear;
+
+  // Keep text input in sync when selectedYear changes externally
+  useEffect(() => {
+    if (!isDragging) {
+      setYearInput(String(selectedYear));
+    }
+  }, [selectedYear, isDragging]);
 
   const togglePlay = useCallback(() => {
     setPlaying((prev) => !prev);
@@ -79,7 +90,7 @@ function GoogleEarthquakeMap({
         onYearChange((prev) => {
           if (prev >= 2026) {
             setPlaying(false);
-            return 2000;
+            return 1932;
           }
           return prev + 1;
         });
@@ -305,18 +316,51 @@ function GoogleEarthquakeMap({
             </button>
             <label>Year</label>
           </div>
-          <span className="year-value">{selectedYear}</span>
+          <input
+            className="year-text-input"
+            type="text"
+            inputMode="numeric"
+            value={isDragging ? String(draggingYear) : yearInput}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+              setYearInput(raw);
+            }}
+            onBlur={() => {
+              const n = Number(yearInput);
+              if (n >= 1932 && n <= 2026) {
+                onYearChange(n);
+              } else {
+                setYearInput(String(selectedYear));
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.target.blur();
+              }
+            }}
+          />
         </div>
         <input
           type="range"
-          min={2000}
+          min={1932}
           max={2026}
           step={1}
-          value={selectedYear}
-          onChange={(e) => onYearChange(Number(e.target.value))}
+          value={displayYear}
+          onChange={(e) => setDraggingYear(Number(e.target.value))}
+          onPointerUp={(e) => {
+            const val = Number(e.target.value);
+            setDraggingYear(null);
+            onYearChange(val);
+          }}
+          onKeyUp={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              onYearChange(displayYear);
+              setDraggingYear(null);
+            }
+          }}
         />
         <div className="year-slider-bounds">
-          <span>2000</span>
+          <span>1932</span>
           <span>2026</span>
         </div>
 

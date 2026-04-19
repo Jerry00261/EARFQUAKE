@@ -49,6 +49,14 @@ export async function getEarthquakes(year) {
   return { locations, totalCount: items.filter((q) => q.mag != null).length };
 }
 
+export async function getAllEarthquakes() {
+  const url = `${API_BASE}${API_PREFIX}/earthquakes?limit=20000&sort_by=time`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Failed to fetch all earthquakes');
+  const data = await response.json();
+  return data.items.map(mapEarthquake);
+}
+
 export async function getLocationHistory(locationId) {
   const response = await fetch(
     `${API_BASE}${API_PREFIX}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=time`
