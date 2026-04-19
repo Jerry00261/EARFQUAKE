@@ -338,6 +338,49 @@ select {
   gap: 12px;
 }
 
+.event-nav-circle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+  z-index: 10;
+}
+
+.event-nav-left {
+  left: 10px;
+}
+
+.event-nav-right {
+  right: 10px;
+}
+
+.event-nav-circle:hover {
+  background: #ff8f00;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+}
+
+.event-nav-circle:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.event-nav-badge {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -638,6 +681,13 @@ select {
   pointer-events: auto;
   min-width: 200px;
   z-index: 5;
+}
+
+.earthquake-count {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  letter-spacing: 0.04em;
 }
 
 .year-slider-header {

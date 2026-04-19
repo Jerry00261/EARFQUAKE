@@ -1,43 +1,102 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import Histogram from './Histogram';
 
-function DashboardPanel({ locationHistory, onClose, panelOpen, selectedEarthquake, selectedYear, yearEvents }) {
+function DashboardPanel({ locationHistory, minMag, onClose, panelOpen, selectedEarthquake, selectedYear, yearEvents }) {
+  const filteredHistory = useMemo(
+    () => locationHistory.filter((q) => q.mag != null && q.mag >= minMag),
+    [locationHistory, minMag]
+  );
+
+  const filteredYearEvents = useMemo(
+    () => (yearEvents || []).filter((q) => q.mag != null && q.mag >= minMag),
+    [yearEvents, minMag]
+  );
+
+  const [eventIndex, setEventIndex] = useState(0);
+  const prevLocationRef = useRef(null);
+
+  // Reset index only when the selected location changes (not when cycling)
+  useEffect(() => {
+    const loc = selectedEarthquake?.locationId ?? null;
+    if (loc !== prevLocationRef.current) {
+      prevLocationRef.current = loc;
+      setEventIndex(0);
+    }
+  }, [selectedEarthquake?.locationId]);
+
+  // Clamp index if filteredYearEvents shrinks (e.g. minMag changes)
+  useEffect(() => {
+    if (filteredYearEvents.length > 0 && eventIndex >= filteredYearEvents.length) {
+      setEventIndex(0);
+    }
+  }, [filteredYearEvents.length, eventIndex]);
+
+  const hasMultiple = filteredYearEvents.length > 1;
+
+  const handleNext = useCallback(() => {
+    setEventIndex((i) => (i + 1) % filteredYearEvents.length);
+  }, [filteredYearEvents.length]);
+
+  const handlePrev = useCallback(() => {
+    setEventIndex((i) => (i - 1 + filteredYearEvents.length) % filteredYearEvents.length);
+  }, [filteredYearEvents.length]);
+
+  const displayQuake = hasMultiple && filteredYearEvents[eventIndex]
+    ? filteredYearEvents[eventIndex]
+    : selectedEarthquake;
+
   const yearStats = useMemo(() => {
-    if (!yearEvents || yearEvents.length === 0) return null;
-    const mags = yearEvents.map((q) => q.mag);
+    if (!filteredYearEvents || filteredYearEvents.length === 0) return null;
+    const mags = filteredYearEvents.map((q) => q.mag);
     const sum = mags.reduce((a, b) => a + b, 0);
     return {
-      count: yearEvents.length,
+      count: filteredYearEvents.length,
       strongest: Math.max(...mags),
       weakest: Math.min(...mags),
       mean: (sum / mags.length).toFixed(2),
     };
-  }, [yearEvents]);
+  }, [filteredYearEvents]);
 
   return (
     <aside className={`dashboard-panel${panelOpen ? ' is-open' : ''}`}>
       <button className="panel-close-btn" onClick={onClose} aria-label="Close panel">×</button>
 
+      {hasMultiple ? (
+        <button className="event-nav-circle event-nav-left" onClick={handlePrev} aria-label="Previous event">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2.5L4.5 7L9 11.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      ) : null}
+
+      {hasMultiple ? (
+        <button className="event-nav-circle event-nav-right" onClick={handleNext} aria-label="Next event">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M5 2.5L9.5 7L5 11.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      ) : null}
+
       <section className="panel-card">
         <div className="panel-header">
           <div>
             <span className="eyebrow">Seismic Zone</span>
-            <h2>{selectedEarthquake ? selectedEarthquake.place : 'No selection'}</h2>
+            <h2>{displayQuake ? displayQuake.place : 'No selection'}</h2>
           </div>
-          {selectedEarthquake ? (
-            <strong style={{ fontSize: '1.5rem', color: '#ef6c00' }}>
-              M {selectedEarthquake.mag.toFixed(1)}
-            </strong>
-          ) : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {displayQuake ? (
+              <strong style={{ fontSize: '1.5rem', color: '#ef6c00' }}>
+                M {displayQuake.mag.toFixed(2)}
+              </strong>
+            ) : null}
+            {hasMultiple ? (
+              <span className="event-nav-badge">{eventIndex + 1}/{filteredYearEvents.length}</span>
+            ) : null}
+          </div>
         </div>
 
-        {selectedEarthquake && yearStats ? (
+        {displayQuake && yearStats ? (
           <div className="detail-grid">
-            <div className="detail">
-              <label>Year</label>
-              <strong data-accent="true">{selectedYear}</strong>
-              <span>Selected period</span>
-            </div>
             <div className="detail">
               <label>Events</label>
               <strong>{yearStats.count}</strong>
@@ -45,22 +104,17 @@ function DashboardPanel({ locationHistory, onClose, panelOpen, selectedEarthquak
             </div>
             <div className="detail">
               <label>Strongest</label>
-              <strong data-accent="true">{yearStats.strongest.toFixed(1)}</strong>
+              <strong data-accent="true">{yearStats.strongest.toFixed(2)}</strong>
               <span>Max magnitude</span>
             </div>
             <div className="detail">
               <label>Weakest</label>
-              <strong>{yearStats.weakest.toFixed(1)}</strong>
+              <strong>{yearStats.weakest.toFixed(2)}</strong>
               <span>Min magnitude</span>
             </div>
             <div className="detail">
-              <label>Mean</label>
-              <strong>{yearStats.mean}</strong>
-              <span>Avg magnitude</span>
-            </div>
-            <div className="detail">
               <label>Location</label>
-              <strong>{selectedEarthquake.lat.toFixed(4)}°, {selectedEarthquake.lng.toFixed(4)}°</strong>
+              <strong>{displayQuake.lat.toFixed(4)}°, {displayQuake.lng.toFixed(4)}°</strong>
               <span>Epicenter zone</span>
             </div>
           </div>
@@ -71,8 +125,8 @@ function DashboardPanel({ locationHistory, onClose, panelOpen, selectedEarthquak
         )}
       </section>
 
-      {selectedEarthquake && locationHistory.length > 0 ? (
-        <Histogram history={locationHistory} selectedYear={selectedYear} />
+      {selectedEarthquake && filteredHistory.length > 0 ? (
+        <Histogram history={filteredHistory} selectedYear={selectedYear} />
       ) : null}
     </aside>
   );

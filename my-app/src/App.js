@@ -18,6 +18,7 @@ import {
 
 function App() {
   const [earthquakes, setEarthquakes] = useState([]);
+  const [totalEventCount, setTotalEventCount] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -41,11 +42,12 @@ function App() {
           return;
         }
 
-        setEarthquakes(dataset);
+        setEarthquakes(dataset.locations);
+        setTotalEventCount(dataset.totalCount);
 
         // Re-select same location after year change
         if (selectedLocationRef.current) {
-          const match = dataset.find(
+          const match = dataset.locations.find(
             (q) => q.locationId === selectedLocationRef.current
           );
           if (match) {
@@ -124,7 +126,7 @@ function App() {
   }, [triggerScreenShake]);
 
   const filteredEarthquakes = useMemo(
-    () => earthquakes.filter((q) => q.mag >= minMag),
+    () => earthquakes.filter((q) => q.mag != null && q.mag >= minMag),
     [earthquakes, minMag]
   );
 
@@ -134,16 +136,34 @@ function App() {
   );
 
   const selectedEarthquake = selectedId ? earthquakeMap.get(selectedId) : null;
+  const selectedLocationId = selectedEarthquake?.locationId ?? null;
 
-  const locationHistory = useMemo(() => {
-    if (!selectedEarthquake) return [];
-    return getLocationHistory(selectedEarthquake.locationId);
-  }, [selectedEarthquake]);
+  const [locationHistory, setLocationHistory] = useState([]);
+  const [yearEvents, setYearEvents] = useState([]);
 
-  const yearEvents = useMemo(() => {
-    if (!selectedEarthquake) return [];
-    return getLocationYearEvents(selectedEarthquake.locationId, selectedYear);
-  }, [selectedEarthquake, selectedYear]);
+  useEffect(() => {
+    if (!selectedLocationId) {
+      setLocationHistory([]);
+      return;
+    }
+    let cancelled = false;
+    getLocationHistory(selectedLocationId).then((data) => {
+      if (!cancelled) setLocationHistory(data);
+    });
+    return () => { cancelled = true; };
+  }, [selectedLocationId]);
+
+  useEffect(() => {
+    if (!selectedLocationId) {
+      setYearEvents([]);
+      return;
+    }
+    let cancelled = false;
+    getLocationYearEvents(selectedLocationId, selectedYear).then((data) => {
+      if (!cancelled) setYearEvents(data);
+    });
+    return () => { cancelled = true; };
+  }, [selectedLocationId, selectedYear]);
 
   const handleSelectEarthquake = useCallback(
     (quakeId) => {
@@ -192,11 +212,13 @@ function App() {
             selectedEarthquake={selectedEarthquake}
             selectedId={selectedId}
             selectedYear={selectedYear}
+            totalEventCount={totalEventCount}
           />
         </div>
 
         <DashboardPanel
           locationHistory={locationHistory}
+          minMag={minMag}
           onClose={handleClosePanel}
           panelOpen={panelOpen}
           selectedEarthquake={selectedEarthquake}

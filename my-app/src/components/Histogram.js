@@ -51,11 +51,8 @@ function Histogram({ history, selectedYear }) {
       <div className="histogram-header">
         <span className="eyebrow">Magnitude Distribution</span>
         <span className="histogram-mean">
-          Mean Magnitude: <strong>{mean}</strong>
+          Avg: <strong>{mean}</strong>
         </span>
-      </div>
-      <div className="histogram-subtitle">
-        {filtered.length} events in {selectedYear || 'all years'}
       </div>
       <div className="histogram-chart">
         {BINS.map((bin, i) => (
