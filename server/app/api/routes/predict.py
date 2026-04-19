@@ -9,7 +9,7 @@ from pathlib import Path
 router = APIRouter()
 
 # Load precomputed heatmap once
-# _heatmap = json.loads((Path(__file__).parent.parent.parent / 'ml' / 'heatmap.json').read_text())
+_heatmap = json.loads((Path(__file__).parent.parent.parent / 'ml' / 'heatmap.json').read_text())
 
 @router.get("/predict", response_model=PredictResponse)
 async def predict(
