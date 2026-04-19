@@ -78,6 +78,7 @@ function GoogleEarthquakeMap({
   const overlayRef = useRef(null);
   const markerRef = useRef(null);
   const listenersRef = useRef([]);
+  const [streetViewActive, setStreetViewActive] = useState(false);
   const latestStateRef = useRef({
     earthquakes,
     onHover,
@@ -131,6 +132,11 @@ function GoogleEarthquakeMap({
 
     mapRef.current = map;
     overlayRef.current = overlay;
+
+    const sv = map.getStreetView();
+    sv.addListener('visible_changed', () => {
+      setStreetViewActive(sv.getVisible());
+    });
 
     return () => {
       listenersRef.current.forEach((listener) => listener.remove());
@@ -291,7 +297,7 @@ function GoogleEarthquakeMap({
     <div className="map-stage">
       <div className="map-canvas" ref={mapNodeRef} />
 
-      {status === 'loaded' && overlayReady ? (
+      {status === 'loaded' && overlayReady && !streetViewActive ? (
         <AuraCanvas
           earthquakes={earthquakes}
           focusNearby={focusNearby}
@@ -304,7 +310,8 @@ function GoogleEarthquakeMap({
         />
       ) : null}
 
-      <div className="map-overlay">
+      {!streetViewActive && (
+        <div className="map-overlay">
         <div className="map-badge">
           <h1>Earthquake Visualization Dashboard</h1>
           <p>
@@ -320,7 +327,9 @@ function GoogleEarthquakeMap({
           </div>
         ) : null}
       </div>
+      )}
 
+      {!streetViewActive && (
       <div className="map-legend">
         <div className="legend-title">Severity</div>
         <div className="legend-row">
@@ -354,6 +363,7 @@ function GoogleEarthquakeMap({
           <span className="legend-label">Reference marker</span>
         </div>
       </div>
+      )}
     </div>
   );
 }
