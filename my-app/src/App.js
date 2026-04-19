@@ -9,14 +9,25 @@ import {
 import './App.css';
 import DashboardPanel from './components/DashboardPanel';
 import GoogleEarthquakeMap from './components/GoogleEarthquakeMap';
+import SeismicRiskMap from './components/SeismicRiskMap';
+import PredictionPanel from './components/PredictionPanel';
 import {
   getEarthquakes,
   getLocationHistory,
   getLocationYearEvents,
   subscribeToEarthquakeFeed,
 } from './services/earthquakeService';
+import {
+  fetchSeismicEarthquakes,
+  fetchHeatmap,
+  fetchPrediction,
+  fetchSeismogram,
+} from './services/seismicService';
 
 function App() {
+  const [activeView, setActiveView] = useState('explorer');
+
+  // --- Explorer view state ---
   const [earthquakes, setEarthquakes] = useState([]);
   const [totalEventCount, setTotalEventCount] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
@@ -28,6 +39,17 @@ function App() {
   const selectedLocationRef = useRef(null);
   const mapShellRef = useRef(null);
   const shakeAnimationRef = useRef(null);
+
+  // --- Seismic Risk view state ---
+  const [seismicQuakes, setSeismicQuakes] = useState([]);
+  const [heatmapPoints, setHeatmapPoints] = useState(null);
+  const [pinLatLng, setPinLatLng] = useState(null);
+  const [prediction, setPrediction] = useState(null);
+  const [seismogram, setSeismogram] = useState(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [seismicPanelOpen, setSeismicPanelOpen] = useState(false);
+  const seismicMapShellRef = useRef(null);
+  const shakeIntervalRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,37 +216,163 @@ function App() {
     setPanelOpen(false);
   }, []);
 
+  // --- Seismic Risk: load data on mount ---
+  useEffect(() => {
+    if (activeView !== 'seismic') return;
+    let cancelled = false;
+
+    Promise.all([fetchSeismicEarthquakes(), fetchHeatmap()])
+      .then(([quakes, hmap]) => {
+        if (cancelled) return;
+        setSeismicQuakes(quakes);
+        setHeatmapPoints(hmap);
+      })
+      .catch((err) => console.error('Seismic data load error:', err));
+
+    return () => { cancelled = true; };
+  }, [activeView]);
+
+  // --- Seismic Risk: map click handler ---
+  const handleSeismicMapClick = useCallback(async (latLng) => {
+    setPinLatLng(latLng);
+    setPrediction(null);
+    setSeismogram(null);
+    setPredictionLoading(true);
+    setSeismicPanelOpen(true);
+
+    // Stop any previous shake
+    if (shakeIntervalRef.current) {
+      clearInterval(shakeIntervalRef.current);
+      shakeIntervalRef.current = null;
+      if (seismicMapShellRef.current) {
+        seismicMapShellRef.current.style.transform = '';
+      }
+    }
+
+    try {
+      const pred = await fetchPrediction(latLng.lat, latLng.lng);
+      setPrediction(pred);
+
+      const seis = await fetchSeismogram(latLng.lat, latLng.lng, pred.vs30, pred.pga_g);
+      setSeismogram(seis);
+
+      // Animate shake using px/py arrays
+      if (seis.px && seis.py && seismicMapShellRef.current) {
+        let frame = 0;
+        const total = seis.px.length;
+        shakeIntervalRef.current = setInterval(() => {
+          if (frame >= total || !seismicMapShellRef.current) {
+            clearInterval(shakeIntervalRef.current);
+            shakeIntervalRef.current = null;
+            if (seismicMapShellRef.current) {
+              seismicMapShellRef.current.style.transform = '';
+            }
+            return;
+          }
+          seismicMapShellRef.current.style.transform =
+            `translate3d(${seis.px[frame]}px, ${seis.py[frame]}px, 0)`;
+          frame++;
+        }, 100);
+      }
+    } catch (err) {
+      console.error('Prediction error:', err);
+    } finally {
+      setPredictionLoading(false);
+    }
+  }, []);
+
+  // Cleanup shake on unmount
+  useEffect(() => () => {
+    if (shakeIntervalRef.current) clearInterval(shakeIntervalRef.current);
+  }, []);
+
+  const handleCloseSeismicPanel = useCallback(() => {
+    setSeismicPanelOpen(false);
+    setPinLatLng(null);
+    setPrediction(null);
+    setSeismogram(null);
+    if (shakeIntervalRef.current) {
+      clearInterval(shakeIntervalRef.current);
+      shakeIntervalRef.current = null;
+      if (seismicMapShellRef.current) {
+        seismicMapShellRef.current.style.transform = '';
+      }
+    }
+  }, []);
+
   return (
     <div className="app-shell">
-      <div className="app-frame">
-        <div className={`map-shell${panelOpen ? ' panel-open' : ''}`} ref={mapShellRef}>
-          <GoogleEarthquakeMap
-            earthquakes={filteredEarthquakes}
-            hoveredId={hoveredId}
-            loading={loading}
+      <nav className="app-tab-bar">
+        <button
+          className={`tab-btn${activeView === 'explorer' ? ' active' : ''}`}
+          onClick={() => setActiveView('explorer')}
+        >
+          Explorer
+        </button>
+        <button
+          className={`tab-btn${activeView === 'seismic' ? ' active' : ''}`}
+          onClick={() => setActiveView('seismic')}
+        >
+          Seismic Risk
+        </button>
+      </nav>
+
+      {activeView === 'explorer' && (
+        <div className="app-frame">
+          <div className={`map-shell${panelOpen ? ' panel-open' : ''}`} ref={mapShellRef}>
+            <GoogleEarthquakeMap
+              earthquakes={filteredEarthquakes}
+              hoveredId={hoveredId}
+              loading={loading}
+              minMag={minMag}
+              onHover={handleHoverEarthquake}
+              onMinMagChange={setMinMag}
+              onSelect={handleSelectEarthquake}
+              onYearChange={setSelectedYear}
+              panelOpen={panelOpen}
+              selectedEarthquake={selectedEarthquake}
+              selectedId={selectedId}
+              selectedYear={selectedYear}
+              totalEventCount={totalEventCount}
+            />
+          </div>
+
+          <DashboardPanel
+            locationHistory={locationHistory}
             minMag={minMag}
-            onHover={handleHoverEarthquake}
-            onMinMagChange={setMinMag}
-            onSelect={handleSelectEarthquake}
-            onYearChange={setSelectedYear}
+            onClose={handleClosePanel}
             panelOpen={panelOpen}
             selectedEarthquake={selectedEarthquake}
-            selectedId={selectedId}
             selectedYear={selectedYear}
-            totalEventCount={totalEventCount}
+            yearEvents={yearEvents}
           />
         </div>
+      )}
 
-        <DashboardPanel
-          locationHistory={locationHistory}
-          minMag={minMag}
-          onClose={handleClosePanel}
-          panelOpen={panelOpen}
-          selectedEarthquake={selectedEarthquake}
-          selectedYear={selectedYear}
-          yearEvents={yearEvents}
-        />
-      </div>
+      {activeView === 'seismic' && (
+        <div className="app-frame">
+          <div
+            className={`map-shell${seismicPanelOpen ? ' panel-open' : ''}`}
+            ref={seismicMapShellRef}
+          >
+            <SeismicRiskMap
+              earthquakes={seismicQuakes}
+              heatmapPoints={heatmapPoints}
+              onMapClick={handleSeismicMapClick}
+              pinLatLng={pinLatLng}
+              panelOpen={seismicPanelOpen}
+            />
+          </div>
+
+          <PredictionPanel
+            prediction={prediction}
+            seismogram={seismogram}
+            pinLatLng={pinLatLng}
+            onClose={handleCloseSeismicPanel}
+            loading={predictionLoading}
+          />
+        </div>
+      )}
     </div>
   );
 }
