@@ -72,7 +72,6 @@ function App() {
   const shakeAnimationRef = useRef(null);
 
   // --- Seismic Risk view state ---
-  const [seismicQuakes, setSeismicQuakes] = useState([]);
   const [heatmapPoints, setHeatmapPoints] = useState(null);
   const [pinLatLng, setPinLatLng] = useState(null);
   const [prediction, setPrediction] = useState(null);
@@ -321,10 +320,9 @@ function App() {
     if (seismicDataLoadedRef.current) return;
     let cancelled = false;
 
-    Promise.all([fetchSeismicEarthquakes(), fetchHeatmap()])
-      .then(([quakes, hmap]) => {
+    Promise.all([fetchHeatmap()])
+      .then(([hmap]) => {
         if (cancelled) return;
-        setSeismicQuakes(quakes);
         setHeatmapPoints(hmap);
         seismicDataLoadedRef.current = true;
       })
