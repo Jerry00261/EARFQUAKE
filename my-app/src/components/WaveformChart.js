@@ -1,7 +1,16 @@
 import { memo, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
 
-function WaveformChart({ waveformMs, sampleRateHz = 10 }) {
+function WaveformChart({ waveformMs, sampleRateHz = 10, playheadFrame = null }) {
   const data = useMemo(() => {
     if (!waveformMs || waveformMs.length === 0) return [];
     return waveformMs.map((value, i) => ({
@@ -9,6 +18,12 @@ function WaveformChart({ waveformMs, sampleRateHz = 10 }) {
       velocity: +value.toFixed(6),
     }));
   }, [waveformMs, sampleRateHz]);
+
+  const playheadTime = useMemo(() => {
+    if (playheadFrame == null) return null;
+    const time = playheadFrame / sampleRateHz;
+    return Math.max(0, Math.min(60, +time.toFixed(2)));
+  }, [playheadFrame, sampleRateHz]);
 
   if (data.length === 0) return null;
 
@@ -23,7 +38,7 @@ function WaveformChart({ waveformMs, sampleRateHz = 10 }) {
           <XAxis
             dataKey="time"
             type="number"
-            domain={['dataMin', 'dataMax']}
+            domain={[0, 60]}
             tick={{ fill: '#6a7d98', fontSize: 10 }}
             tickCount={7}
             label={{ value: 'Time (s)', position: 'insideBottom', offset: -2, fill: '#6a7d98', fontSize: 10 }}
@@ -52,6 +67,15 @@ function WaveformChart({ waveformMs, sampleRateHz = 10 }) {
             dot={false}
             isAnimationActive={false}
           />
+          {playheadTime != null && (
+            <ReferenceLine
+              x={playheadTime}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              strokeOpacity={0.95}
+              ifOverflow="visible"
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

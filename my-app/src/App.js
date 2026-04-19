@@ -46,10 +46,9 @@ function App() {
   const [pinLatLng, setPinLatLng] = useState(null);
   const [prediction, setPrediction] = useState(null);
   const [seismogram, setSeismogram] = useState(null);
+  const [seismogramPlayheadFrame, setSeismogramPlayheadFrame] = useState(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [seismicPanelOpen, setSeismicPanelOpen] = useState(false);
-  const seismicMapShellRef = useRef(null);
-  const shakeIntervalRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -237,17 +236,9 @@ function App() {
     setPinLatLng(latLng);
     setPrediction(null);
     setSeismogram(null);
+    setSeismogramPlayheadFrame(null);
     setPredictionLoading(true);
     setSeismicPanelOpen(true);
-
-    // Stop any previous shake
-    if (shakeIntervalRef.current) {
-      clearInterval(shakeIntervalRef.current);
-      shakeIntervalRef.current = null;
-      if (seismicMapShellRef.current) {
-        seismicMapShellRef.current.style.transform = '';
-      }
-    }
 
     try {
       const pred = await fetchPrediction(latLng.lat, latLng.lng);
@@ -255,25 +246,6 @@ function App() {
 
       const seis = await fetchSeismogram(latLng.lat, latLng.lng, pred.vs30, pred.pga_g);
       setSeismogram(seis);
-
-      // Animate shake using px/py arrays
-      if (seis.px && seis.py && seismicMapShellRef.current) {
-        let frame = 0;
-        const total = seis.px.length;
-        shakeIntervalRef.current = setInterval(() => {
-          if (frame >= total || !seismicMapShellRef.current) {
-            clearInterval(shakeIntervalRef.current);
-            shakeIntervalRef.current = null;
-            if (seismicMapShellRef.current) {
-              seismicMapShellRef.current.style.transform = '';
-            }
-            return;
-          }
-          seismicMapShellRef.current.style.transform =
-            `translate3d(${seis.px[frame]}px, ${seis.py[frame]}px, 0)`;
-          frame++;
-        }, 100);
-      }
     } catch (err) {
       console.error('Prediction error:', err);
     } finally {
@@ -281,23 +253,12 @@ function App() {
     }
   }, []);
 
-  // Cleanup shake on unmount
-  useEffect(() => () => {
-    if (shakeIntervalRef.current) clearInterval(shakeIntervalRef.current);
-  }, []);
-
   const handleCloseSeismicPanel = useCallback(() => {
     setSeismicPanelOpen(false);
     setPinLatLng(null);
     setPrediction(null);
     setSeismogram(null);
-    if (shakeIntervalRef.current) {
-      clearInterval(shakeIntervalRef.current);
-      shakeIntervalRef.current = null;
-      if (seismicMapShellRef.current) {
-        seismicMapShellRef.current.style.transform = '';
-      }
-    }
+    setSeismogramPlayheadFrame(null);
   }, []);
 
   return (
@@ -351,22 +312,22 @@ function App() {
 
       {activeView === 'seismic' && (
         <div className="app-frame">
-          <div
-            className={`map-shell${seismicPanelOpen ? ' panel-open' : ''}`}
-            ref={seismicMapShellRef}
-          >
+          <div className={`map-shell${seismicPanelOpen ? ' panel-open' : ''}`}>
             <SeismicRiskMap
               earthquakes={seismicQuakes}
               heatmapPoints={heatmapPoints}
               onMapClick={handleSeismicMapClick}
               pinLatLng={pinLatLng}
               panelOpen={seismicPanelOpen}
+              seismogram={seismogram}
+              onPlayheadFrameChange={setSeismogramPlayheadFrame}
             />
           </div>
 
           <PredictionPanel
             prediction={prediction}
             seismogram={seismogram}
+            playheadFrame={seismogramPlayheadFrame}
             pinLatLng={pinLatLng}
             onClose={handleCloseSeismicPanel}
             loading={predictionLoading}

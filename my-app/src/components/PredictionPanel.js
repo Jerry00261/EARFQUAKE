@@ -8,7 +8,7 @@ const TIER_COLORS = {
   low: '#4ade80',
 };
 
-function PredictionPanel({ prediction, seismogram, pinLatLng, onClose, loading }) {
+function PredictionPanel({ prediction, seismogram, playheadFrame, pinLatLng, onClose, loading }) {
   if (!pinLatLng) return null;
 
   const tierColor = prediction ? TIER_COLORS[prediction.tier] || '#8a9bb8' : '#8a9bb8';
@@ -71,6 +71,7 @@ function PredictionPanel({ prediction, seismogram, pinLatLng, onClose, loading }
                 <WaveformChart
                   waveformMs={seismogram.waveform_ms}
                   sampleRateHz={seismogram.sample_rate_hz}
+                  playheadFrame={playheadFrame}
                 />
               </div>
             )}

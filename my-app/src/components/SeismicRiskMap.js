@@ -18,14 +18,49 @@ const MAP_STYLES = [
 
 const TIER_COLORS = { extreme: '#ef4444', high: '#f97316', medium: '#facc15', low: '#4ade80' };
 
-function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, panelOpen }) {
+function SeismicRiskMap({
+  earthquakes,
+  heatmapPoints,
+  onMapClick,
+  pinLatLng,
+  panelOpen,
+  seismogram,
+  onPlayheadFrameChange,
+}) {
   const { status, error } = useGoogleMapsApi();
   const mapNodeRef = useRef(null);
+  const streetViewContainerRef = useRef(null);
   const mapRef = useRef(null);
   const pinMarkerRef = useRef(null);
   const quakeMarkersRef = useRef([]);
   const heatmapRectsRef = useRef([]);
+  const shakeIntervalRef = useRef(null);
+  const shakeEnabledRef = useRef(true);
   const [mapReady, setMapReady] = useState(false);
+  const [streetViewActive, setStreetViewActive] = useState(false);
+  const [streetViewSession, setStreetViewSession] = useState(0);
+  const [shakeEnabled, setShakeEnabled] = useState(true);
+
+  const resetStreetViewTransform = useCallback(() => {
+    if (streetViewContainerRef.current) {
+      streetViewContainerRef.current.style.transform = 'translate(0px, 0px)';
+    }
+  }, []);
+
+  const stopShakeAnimation = useCallback(() => {
+    if (shakeIntervalRef.current) {
+      clearInterval(shakeIntervalRef.current);
+      shakeIntervalRef.current = null;
+    }
+    resetStreetViewTransform();
+  }, [resetStreetViewTransform]);
+
+  useEffect(() => {
+    shakeEnabledRef.current = shakeEnabled;
+    if (!shakeEnabled) {
+      resetStreetViewTransform();
+    }
+  }, [shakeEnabled, resetStreetViewTransform]);
 
   // Initialize map
   useEffect(() => {
@@ -60,15 +95,21 @@ function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, pan
       onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
     });
 
-    // Intercept pegman drop: use drop position for prediction instead of Street View
+    // Use pegman drop position for prediction while letting Street View stay visible.
     const sv = map.getStreetView();
     sv.addListener('visible_changed', () => {
-      if (sv.getVisible()) {
-        sv.setVisible(false);
+      const visible = sv.getVisible();
+      setStreetViewActive(visible);
+
+      if (visible) {
         const dropPos = sv.getPosition();
         if (dropPos) {
           onMapClick({ lat: dropPos.lat(), lng: dropPos.lng() });
         }
+        setStreetViewSession((session) => session + 1);
+      } else {
+        stopShakeAnimation();
+        onPlayheadFrameChange?.(null);
       }
     });
 
@@ -77,7 +118,7 @@ function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, pan
       window.google.maps.event.clearInstanceListeners(sv);
       mapRef.current = null;
     };
-  }, [status, onMapClick]);
+  }, [status, onMapClick, onPlayheadFrameChange, stopShakeAnimation]);
 
   // Resize on panel toggle
   useEffect(() => {
@@ -85,6 +126,65 @@ function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, pan
       window.google.maps.event.trigger(mapRef.current, 'resize');
     }
   }, [panelOpen]);
+
+  useEffect(() => {
+    if (!streetViewActive) {
+      stopShakeAnimation();
+      onPlayheadFrameChange?.(null);
+      return;
+    }
+
+    const px = seismogram?.px;
+    const py = seismogram?.py;
+
+    if (!Array.isArray(px) || !Array.isArray(py) || px.length === 0 || py.length === 0) {
+      stopShakeAnimation();
+      onPlayheadFrameChange?.(null);
+      return;
+    }
+
+    stopShakeAnimation();
+
+    const totalFrames = Math.min(600, px.length, py.length);
+    let frame = 0;
+
+    shakeIntervalRef.current = setInterval(() => {
+      if (frame >= totalFrames) {
+        stopShakeAnimation();
+        onPlayheadFrameChange?.(null);
+        return;
+      }
+
+      onPlayheadFrameChange?.(frame);
+
+      if (shakeEnabledRef.current && streetViewContainerRef.current) {
+        const x = Number(px[frame]) || 0;
+        const y = Number(py[frame]) || 0;
+        streetViewContainerRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      } else {
+        resetStreetViewTransform();
+      }
+
+      frame += 1;
+    }, 100);
+
+    return () => {
+      stopShakeAnimation();
+      onPlayheadFrameChange?.(null);
+    };
+  }, [
+    onPlayheadFrameChange,
+    resetStreetViewTransform,
+    seismogram,
+    stopShakeAnimation,
+    streetViewActive,
+    streetViewSession,
+  ]);
+
+  useEffect(() => () => {
+    stopShakeAnimation();
+    onPlayheadFrameChange?.(null);
+  }, [onPlayheadFrameChange, stopShakeAnimation]);
 
   // Draw heatmap tiles
   useEffect(() => {
@@ -185,11 +285,13 @@ function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, pan
       pinMarkerRef.current = marker;
       mapRef.current.panTo({ lat: pinLatLng.lat, lng: pinLatLng.lng });
     }
-  }, [mapReady, pinLatLng]);
+  }, [mapReady, onMapClick, pinLatLng]);
 
   return (
-    <div className={`seismic-map-stage${panelOpen ? ' seismic-panel-open' : ''}`}>
-      <div className="map-canvas" ref={mapNodeRef} />
+    <div className={`seismic-map-stage${streetViewActive ? ' streetview-active' : ''}`}>
+      <div className="seismic-streetview-container" ref={streetViewContainerRef}>
+        <div className="map-canvas" ref={mapNodeRef} />
+      </div>
 
       <div className="map-overlay">
         <div className="map-badge">
@@ -224,6 +326,16 @@ function SeismicRiskMap({ earthquakes, heatmapPoints, onMapClick, pinLatLng, pan
           <span className="legend-label">Prediction pin</span>
         </div>
       </div>
+
+      {streetViewActive && (
+        <button
+          className="streetview-shake-toggle"
+          type="button"
+          onClick={() => setShakeEnabled((enabled) => !enabled)}
+        >
+          {shakeEnabled ? 'Disable Shake' : 'Enable Shake'}
+        </button>
+      )}
     </div>
   );
 }
