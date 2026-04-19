@@ -38,12 +38,6 @@ select {
   overflow: hidden;
 }
 
-.app-frame {
-  position: relative;
-  height: 100vh;
-  overflow: hidden;
-}
-
 .map-shell {
   position: absolute;
   inset: 0;
@@ -955,4 +949,346 @@ select {
   font-size: 0.62rem;
   color: #6a7d98;
   letter-spacing: 0.06em;
+}
+
+/* ─── Tab Bar ───────────────────────── */
+
+.app-tab-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  display: flex;
+  gap: 0;
+  background: var(--panel-strong);
+  border-bottom: 1px solid var(--panel-border);
+  height: 42px;
+}
+
+.tab-btn {
+  flex: 1;
+  max-width: 200px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0 20px;
+  position: relative;
+  transition: color 200ms;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn.active {
+  color: var(--accent-strong);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  background: var(--accent-strong);
+  border-radius: 2px 2px 0 0;
+}
+
+.app-frame {
+  position: relative;
+  height: calc(100vh - 42px);
+  top: 42px;
+  overflow: hidden;
+}
+
+/* ─── Seismic Risk Map ──────────────── */
+
+.seismic-map-stage {
+  position: absolute;
+  inset: 0;
+  transition: right 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.seismic-map-stage.seismic-panel-open {
+  right: 380px;
+}
+
+.seismic-map-stage .map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.seismic-map-stage .map-overlay {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.seismic-map-stage .map-badge {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 14px 18px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.seismic-map-stage .map-badge h1 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.seismic-map-stage .map-badge p {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0;
+  max-width: 260px;
+}
+
+.seismic-map-stage .map-status {
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Legend */
+
+.map-legend {
+  position: absolute;
+  bottom: 24px;
+  left: 18px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  z-index: 3;
+  min-width: 130px;
+}
+
+.legend-title {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+.legend-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 8px 0;
+}
+
+.legend-gradient-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #4ade80, #a0dc50, #facc15, #f58220, #ef4444);
+}
+
+.legend-gradient-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.58rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.legend-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef6c00;
+  border: 2px solid #ffffff;
+  flex-shrink: 0;
+}
+
+/* ─── Prediction Panel ──────────────── */
+
+.prediction-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  background: var(--panel);
+  border-left: 1px solid var(--panel-border);
+  backdrop-filter: blur(24px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.prediction-panel.is-open {
+  transform: translateX(0);
+}
+
+.panel-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+  z-index: 5;
+}
+
+.panel-close-btn:hover {
+  color: var(--text);
+}
+
+.panel-card {
+  padding: 22px 20px;
+}
+
+.panel-header .eyebrow,
+.waveform-header .eyebrow {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.panel-header h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 4px 0 0;
+  color: var(--text);
+}
+
+.panel-copy {
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail.detail-span-2 {
+  grid-column: span 2;
+}
+
+.detail label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.detail strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.detail strong[data-accent='true'] {
+  color: var(--accent-strong);
+}
+
+.detail span {
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.empty-state {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* ─── Waveform Chart ────────────────── */
+
+.waveform-chart-container {
+  margin-top: 16px;
+}
+
+.waveform-header {
+  margin-bottom: 8px;
+}
+
+/* ─── Loading Spinner ───────────────── */
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 0 12px;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--panel-border);
+  border-top-color: var(--accent-strong);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Seismic Pegman Position ───────── */
+
+.seismic-map-stage .map-canvas .gm-svpc {
+  left: 155px !important;
+  bottom: 36px !important;
+  background: rgba(12, 18, 32, 0.85) !important;
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(140, 170, 220, 0.12) !important;
+  border-radius: 12px !important;
 }
