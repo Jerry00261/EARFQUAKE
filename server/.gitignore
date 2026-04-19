@@ -4,20 +4,3 @@ __pycache__/
 .mypy_cache/
 .env
 .env*.local
-
-# data files
-server/data/california_earthquakes.csv
-server/data/seismos_16_receivers.npy
-server/data/source_locations.csv
-
-# model files
-server/app/ml/risk_model.pkl
-server/app/ml/label_encoder.pkl
-server/app/ml/heatmap.json
-
-# node
-node_modules/
-my-app/node_modules/
-my-app/build/
-.env
-server/.env
