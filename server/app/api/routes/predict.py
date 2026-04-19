@@ -37,10 +37,11 @@ async def waveform(
 
 @router.get("/seismogram")
 async def seismogram(
-    source_lat: float = Query(..., ge=32.0, le=42.0),
-    source_lon: float = Query(..., ge=-125.0, le=-114.0),
-    vs30:       float = Query(..., gt=0),
-    pga_g:      float = Query(..., gt=0),
+    source_lat:    float = Query(..., ge=32.0, le=42.0),
+    source_lon:    float = Query(..., ge=-125.0, le=-114.0),
+    vs30:          float = Query(..., gt=0),
+    pga_g:         float = Query(..., gt=0),
+    fault_dist_km: float = Query(default=10.0, gt=0),
 ):
-    return get_seismogram(source_lat, source_lon, vs30, pga_g)
-
+    from app.ml.rom import get_seismogram
+    return get_seismogram(source_lat, source_lon, vs30, pga_g, fault_dist_km)
