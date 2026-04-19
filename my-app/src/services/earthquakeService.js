@@ -22,17 +22,15 @@ function mapEarthquake(item) {
 }
 
 export async function getEarthquakes(year) {
-  const response = await fetch(
-    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&sort_by=time`
-  );
+  let url = `${API_BASE}${API_PREFIX}/earthquakes?limit=500&sort_by=time`;
+  if (year != null) {
+    url += `&year=${year}`;
+  }
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch earthquakes');
   const data = await response.json();
 
   let items = data.items.map(mapEarthquake);
-
-  if (year != null) {
-    items = items.filter((q) => q.year === year);
-  }
 
   // Group by location, pick strongest event per location
   const byLocation = new Map();
@@ -62,15 +60,16 @@ export async function getLocationHistory(locationId) {
 }
 
 export async function getLocationYearEvents(locationId, year) {
-  const response = await fetch(
-    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=magnitude`
-  );
+  let url = `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=magnitude`;
+  if (year != null) {
+    url += `&year=${year}`;
+  }
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch location events');
   const data = await response.json();
 
   return data.items
     .map(mapEarthquake)
-    .filter((q) => q.year === year)
     .sort((a, b) => b.mag - a.mag);
 }
 

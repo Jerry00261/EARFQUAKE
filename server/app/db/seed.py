@@ -110,6 +110,8 @@ def _seed_csv_earthquakes(data_dir: Path) -> int:
                     return None
                 return float(val)
 
+            raw_place = row.get("place", "").strip() or None
+
             document = {
                 "_id": f"csv_{index}",
                 "source": "csv",
@@ -122,8 +124,8 @@ def _seed_csv_earthquakes(data_dir: Path) -> int:
                 "sig": _float_or_none(row.get("sig")),
                 "vs30": _float_or_none(row.get("vs30")),
                 "site_class": row.get("site_class", "").strip() or None,
-                "place": None,
-                "original_place": None,
+                "place": _extract_california_locality(raw_place),
+                "original_place": raw_place,
                 "title": None,
                 "url": None,
             }
