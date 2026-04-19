@@ -24,7 +24,7 @@ def _serialize(doc: dict) -> dict:
 
 @router.get("", response_model=EarthquakeListResponse)
 async def list_earthquakes(
-    limit:         int          = Query(default=50, ge=1, le=500),
+    limit:         int          = Query(default=50, ge=1, le=5000),
     min_magnitude: float | None = Query(default=None, ge=0),
     site_class:    str | None   = Query(default=None),
     place:         str | None   = Query(default=None),
