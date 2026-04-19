@@ -4,18 +4,22 @@ import { useGoogleMapsApi } from '../hooks/useGoogleMapsApi';
 
 const DEFAULT_CENTER = { lat: 33.92, lng: -117.97 };
 
-const DARK_MAP_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#09101a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#93a9cb' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#09101a' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#243449' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6c85ad' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#142131' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#193248' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0a1626' }] },
+const MAP_STYLES = [
+  { elementType: 'geometry', stylers: [{ color: '#1c2a3a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9bb8' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#141e2e' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2e4058' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e2e40' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a3028' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243446' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a2636' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2c3e52' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1e2e40' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#06101c' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4f6b94' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#111c2a' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a6480' }] },
 ];
 
 function findIntersectingEarthquake(event, container, overlay, earthquakes) {
@@ -32,7 +36,7 @@ function findIntersectingEarthquake(event, container, overlay, earthquakes) {
   let nearestDistance = Number.POSITIVE_INFINITY;
 
   earthquakes.forEach((quake) => {
-    const pixel = projection.fromLatLngToDivPixel(
+    const pixel = projection.fromLatLngToContainerPixel(
       new window.google.maps.LatLng(quake.lat, quake.lng)
     );
 
@@ -63,6 +67,7 @@ function GoogleEarthquakeMap({
   onHover,
   onSelect,
   onUserPointChange,
+  panelOpen,
   selectedEarthquake,
   selectedId,
   userPoint,
@@ -101,10 +106,11 @@ function GoogleEarthquakeMap({
       minZoom: 6,
       maxZoom: 13,
       disableDefaultUI: true,
+      streetViewControl: true,
       clickableIcons: false,
       gestureHandling: 'greedy',
-      backgroundColor: '#08111f',
-      styles: DARK_MAP_STYLES,
+      backgroundColor: '#1c2a3a',
+      styles: MAP_STYLES,
     });
 
     const overlay = new window.google.maps.OverlayView();
@@ -116,6 +122,12 @@ function GoogleEarthquakeMap({
       setOverlayReady(false);
     };
     overlay.setMap(map);
+
+    map.setOptions({
+      streetViewControlOptions: {
+        position: window.google.maps.ControlPosition.RIGHT_BOTTOM,
+      },
+    });
 
     mapRef.current = map;
     overlayRef.current = overlay;
@@ -141,6 +153,12 @@ function GoogleEarthquakeMap({
       }
     };
   }, [status]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    // Trigger a resize so Google Maps recalculates controls after the container changes size
+    window.google.maps.event.trigger(mapRef.current, 'resize');
+  }, [panelOpen]);
 
   useEffect(() => {
     if (!mapRef.current || !overlayRef.current) {
@@ -205,9 +223,9 @@ function GoogleEarthquakeMap({
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: '#ffb06d',
+          fillColor: '#ef6c00',
           fillOpacity: 1,
-          strokeColor: '#08111f',
+          strokeColor: '#ffffff',
           strokeWeight: 2,
         },
       });
@@ -304,14 +322,36 @@ function GoogleEarthquakeMap({
       </div>
 
       <div className="map-legend">
-        <div className="legend-pill" data-tone="default">
-          Regional epicenters
+        <div className="legend-title">Severity</div>
+        <div className="legend-row">
+          <span className="legend-dot" data-tone="low" />
+          <span className="legend-ring" data-tone="low" />
+          <span className="legend-label">Low (M &lt; 3)</span>
         </div>
-        <div className="legend-pill" data-tone="selected">
-          Selected event
+        <div className="legend-row">
+          <span className="legend-dot" data-tone="mid" />
+          <span className="legend-ring" data-tone="mid" />
+          <span className="legend-label">Moderate (M 3–5)</span>
         </div>
-        <div className="legend-pill" data-tone="nearby">
-          Inside threshold radius
+        <div className="legend-row">
+          <span className="legend-dot" data-tone="high" />
+          <span className="legend-ring" data-tone="high" />
+          <span className="legend-label">Severe (M 5+)</span>
+        </div>
+        <div className="legend-divider" />
+        <div className="legend-row">
+          <span className="legend-dot" data-tone="selected" />
+          <span className="legend-ring" data-tone="selected" />
+          <span className="legend-label">Selected</span>
+        </div>
+        <div className="legend-row">
+          <span className="legend-dot" data-tone="dimmed" />
+          <span className="legend-label">Outside threshold</span>
+        </div>
+        <div className="legend-divider" />
+        <div className="legend-row">
+          <span className="legend-marker" />
+          <span className="legend-label">Reference marker</span>
         </div>
       </div>
     </div>

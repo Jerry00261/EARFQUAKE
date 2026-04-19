@@ -10,11 +10,13 @@ function DashboardPanel({
   liveFeedEnabled,
   loading,
   onClearUserPoint,
+  onClose,
   onSelectEarthquake,
   onSetDistanceThresholdKm,
   onSetFocusNearby,
   onSetLiveFeedEnabled,
   onSetSortMode,
+  panelOpen,
   referencePoint,
   selectedDistanceKm,
   selectedEarthquake,
@@ -26,7 +28,8 @@ function DashboardPanel({
   const activeEarthquake = hoveredEarthquake || selectedEarthquake;
 
   return (
-    <aside className="dashboard-panel">
+    <aside className={`dashboard-panel${panelOpen ? ' is-open' : ''}`}>
+      <button className="panel-close-btn" onClick={onClose} aria-label="Close panel">×</button>
       <section className="panel-card">
         <div className="panel-header">
           <div>
@@ -66,7 +69,7 @@ function DashboardPanel({
             <h3>{activeEarthquake ? activeEarthquake.place : 'Awaiting selection'}</h3>
           </div>
           {activeEarthquake ? (
-            <strong style={{ fontSize: '1.5rem', color: '#ff9658' }}>
+            <strong style={{ fontSize: '1.5rem', color: '#ef6c00' }}>
               M {activeEarthquake.mag.toFixed(1)}
             </strong>
           ) : null}

@@ -1,15 +1,6 @@
 import { memo, useEffect, useRef } from 'react';
 
-function resizeCanvas(canvas, container) {
-  const context = canvas.getContext('2d');
-  const pixelRatio = window.devicePixelRatio || 1;
-  const { width, height } = container.getBoundingClientRect();
-  canvas.width = Math.max(1, Math.round(width * pixelRatio));
-  canvas.height = Math.max(1, Math.round(height * pixelRatio));
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-}
+const PADDING = 200;
 
 function AuraCanvas({
   focusNearby,
@@ -44,22 +35,25 @@ function AuraCanvas({
   }, [earthquakes, focusNearby, hoveredId, nearbyIds, selectedId, userPoint]);
 
   useEffect(() => {
-    if (!map || !overlay || !canvasRef.current) {
+    if (!map || !overlay) {
       return undefined;
     }
 
-    const canvas = canvasRef.current;
-    const container = canvas.parentElement;
+    const panes = overlay.getPanes();
+    if (!panes) {
+      return undefined;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.pointerEvents = 'none';
+    panes.overlayLayer.appendChild(canvas);
+    canvasRef.current = canvas;
+
     const context = canvas.getContext('2d');
-
-    if (!container || !context) {
+    if (!context) {
       return undefined;
     }
-
-    resizeCanvas(canvas, container);
-
-    const resizeObserver = new ResizeObserver(() => resizeCanvas(canvas, container));
-    resizeObserver.observe(container);
 
     let disposed = false;
 
@@ -75,11 +69,43 @@ function AuraCanvas({
         return;
       }
 
-      const width = canvas.width / (window.devicePixelRatio || 1);
-      const height = canvas.height / (window.devicePixelRatio || 1);
+      const bounds = map.getBounds();
+      if (!bounds) {
+        animationFrameRef.current = window.requestAnimationFrame(render);
+        return;
+      }
 
+      const sw = projection.fromLatLngToDivPixel(bounds.getSouthWest());
+      const ne = projection.fromLatLngToDivPixel(bounds.getNorthEast());
+
+      if (!sw || !ne) {
+        animationFrameRef.current = window.requestAnimationFrame(render);
+        return;
+      }
+
+      const left = Math.floor(sw.x) - PADDING;
+      const top = Math.floor(ne.y) - PADDING;
+      const width = Math.ceil(ne.x - sw.x) + PADDING * 2;
+      const height = Math.ceil(sw.y - ne.y) + PADDING * 2;
+
+      const pixelRatio = window.devicePixelRatio || 1;
+
+      canvas.style.left = left + 'px';
+      canvas.style.top = top + 'px';
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+
+      const pxWidth = Math.round(width * pixelRatio);
+      const pxHeight = Math.round(height * pixelRatio);
+
+      if (canvas.width !== pxWidth || canvas.height !== pxHeight) {
+        canvas.width = pxWidth;
+        canvas.height = pxHeight;
+      }
+
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       context.clearRect(0, 0, width, height);
-      context.globalCompositeOperation = 'lighter';
+      context.globalCompositeOperation = 'source-over';
 
       const state = latestStateRef.current;
 
@@ -92,8 +118,8 @@ function AuraCanvas({
           return;
         }
 
-        const x = pixel.x;
-        const y = pixel.y;
+        const x = pixel.x - left;
+        const y = pixel.y - top;
 
         if (x < -140 || y < -140 || x > width + 140 || y > height + 140) {
           return;
@@ -107,12 +133,18 @@ function AuraCanvas({
         const baseRadius = 3 + quake.mag * 1.75;
         const waveSpan = 26 + quake.mag * 19;
         const speed = 0.12 + quake.mag * 0.055;
-        const alphaScale = dimmed ? 0.18 : isSelected ? 1.35 : isHovered ? 1.2 : 1;
-        const tone = isSelected
-          ? '255, 150, 88'
-          : isNearby
-            ? '94, 230, 210'
-            : '127, 214, 255';
+        const alphaScale = dimmed ? 0.12 : isSelected ? 1.2 : isHovered ? 1.0 : 0.8;
+
+        let tone;
+        if (isSelected) {
+          tone = '249, 115, 22';
+        } else if (quake.mag >= 5) {
+          tone = '239, 68, 68';
+        } else if (quake.mag >= 3) {
+          tone = '250, 204, 21';
+        } else {
+          tone = '74, 222, 128';
+        }
 
         for (let index = 0; index < pulseCount; index += 1) {
           const progress = (timestamp * 0.001 * speed + index / pulseCount) % 1;
@@ -123,20 +155,20 @@ function AuraCanvas({
 
           context.beginPath();
           context.lineWidth = isSelected ? 2.4 : isHovered ? 2 : 1.4;
-          context.strokeStyle = `rgba(${tone}, ${Math.min(opacity, 0.9)})`;
+          context.strokeStyle = `rgba(${tone}, ${Math.min(opacity, 0.7)})`;
           context.arc(x, y, radius, 0, Math.PI * 2);
           context.stroke();
         }
 
         context.beginPath();
-        context.fillStyle = `rgba(${tone}, ${dimmed ? 0.22 : 0.92})`;
+        context.fillStyle = `rgba(${tone}, ${dimmed ? 0.15 : 0.85})`;
         context.arc(x, y, isSelected ? 5.5 : 4.2, 0, Math.PI * 2);
         context.fill();
 
         if (isSelected || isHovered) {
           context.beginPath();
           context.lineWidth = 1.6;
-          context.strokeStyle = `rgba(${tone}, ${dimmed ? 0.3 : 0.9})`;
+          context.strokeStyle = `rgba(${tone}, ${dimmed ? 0.2 : 0.7})`;
           context.arc(x, y, baseRadius + 8, 0, Math.PI * 2);
           context.stroke();
         }
@@ -150,13 +182,15 @@ function AuraCanvas({
 
     return () => {
       disposed = true;
-      resizeObserver.disconnect();
       window.cancelAnimationFrame(animationFrameRef.current);
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      if (canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+      }
+      canvasRef.current = null;
     };
   }, [map, overlay]);
 
-  return <canvas aria-hidden="true" className="aura-canvas" ref={canvasRef} />;
+  return null;
 }
 
 export default memo(AuraCanvas);

@@ -20,6 +20,7 @@ function App() {
   const [earthquakes, setEarthquakes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [userPoint, setUserPoint] = useState(null);
   const [distanceThresholdKm, setDistanceThresholdKm] = useState(90);
   const [sortMode, setSortMode] = useState('distance');
@@ -43,16 +44,6 @@ function App() {
         }
 
         setEarthquakes(dataset);
-
-        const strongest = dataset.reduce((top, quake) => {
-          if (!top || quake.mag > top.mag) {
-            return quake;
-          }
-
-          return top;
-        }, null);
-
-        setSelectedId(strongest?.id ?? null);
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || 'Unable to load mock earthquakes.');
@@ -230,6 +221,7 @@ function App() {
     (quakeId) => {
       const quake = earthquakeMap.get(quakeId);
       setSelectedId(quakeId);
+      setPanelOpen(true);
 
       if (quake) {
         triggerScreenShake(quake.mag);
@@ -244,16 +236,21 @@ function App() {
 
   const handleUserPointChange = useCallback((nextPoint) => {
     setUserPoint(nextPoint);
+    setFocusNearby(true);
   }, []);
 
   const handleClearUserPoint = useCallback(() => {
     setUserPoint(null);
   }, []);
 
+  const handleClosePanel = useCallback(() => {
+    setPanelOpen(false);
+  }, []);
+
   return (
     <div className="app-shell">
       <div className="app-frame">
-        <div className="map-shell" ref={mapShellRef}>
+        <div className={`map-shell${panelOpen ? ' panel-open' : ''}`} ref={mapShellRef}>
           <GoogleEarthquakeMap
             earthquakes={earthquakes}
             focusNearby={focusNearby}
@@ -263,6 +260,7 @@ function App() {
             onHover={handleHoverEarthquake}
             onSelect={handleSelectEarthquake}
             onUserPointChange={handleUserPointChange}
+            panelOpen={panelOpen}
             selectedEarthquake={selectedEarthquake}
             selectedId={selectedId}
             userPoint={userPoint}
@@ -278,11 +276,13 @@ function App() {
           liveFeedEnabled={liveFeedEnabled}
           loading={loading}
           onClearUserPoint={handleClearUserPoint}
+          onClose={handleClosePanel}
           onSelectEarthquake={handleSelectEarthquake}
           onSetDistanceThresholdKm={setDistanceThresholdKm}
           onSetFocusNearby={setFocusNearby}
           onSetLiveFeedEnabled={setLiveFeedEnabled}
           onSetSortMode={setSortMode}
+          panelOpen={panelOpen}
           referencePoint={referencePoint}
           selectedDistanceKm={selectedDistanceKm}
           selectedEarthquake={selectedEarthquake}
