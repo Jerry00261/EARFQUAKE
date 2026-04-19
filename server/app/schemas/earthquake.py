@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -5,8 +7,9 @@ class EarthquakeResponse(BaseModel):
     id: str
     magnitude: float | None = None
     place: str | None = None
-    time: int | None = None
-    updated: int | None = None
+    original_place: str | None = None
+    time: datetime | None = None
+    updated: datetime | None = None
     title: str | None = None
     url: str | None = None
     status: str | None = None
@@ -27,4 +30,4 @@ class EarthquakeSummaryResponse(BaseModel):
     max_magnitude: float | None = None
     average_magnitude: float | None = None
     latest_earthquake_id: str | None = None
-    latest_earthquake_time: int | None = None
+    latest_earthquake_time: datetime | None = None

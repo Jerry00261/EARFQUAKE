@@ -6,7 +6,7 @@ from app.schemas.earthquake import (
     EarthquakeResponse,
     EarthquakeSummaryResponse,
 )
-
+from datetime import datetime
 router = APIRouter()
 
 
@@ -15,6 +15,7 @@ def _serialize_earthquake(document: dict) -> dict:
         "id": document["_id"],
         "magnitude": document.get("magnitude"),
         "place": document.get("place"),
+        "original_place": document.get("original_place"),
         "time": document.get("time"),
         "updated": document.get("updated"),
         "title": document.get("title"),
@@ -50,12 +51,16 @@ async def list_earthquakes(
 
 
 @router.get("/summary", response_model=EarthquakeSummaryResponse)
-async def earthquake_summary() -> EarthquakeSummaryResponse:
+async def earthquake_summary(place: str | None = None, year: int = datetime.now().year) -> EarthquakeSummaryResponse:
+    query = {"time": {"$gte": datetime(year, 1, 1), "$lt": datetime(year + 1, 1, 1)}}
+    if place:
+        query["place"] = place
     collection = earthquakes_collection()
-    latest = collection.find_one(sort=[("time", -1)])
+    latest = collection.find_one(query, sort=[("time", -1)])
     aggregate = list(
         collection.aggregate(
             [
+                {"$match": query},
                 {
                     "$group": {
                         "_id": None,

@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
@@ -83,9 +84,10 @@ EARTHQUAKE_FIXTURES = [
     {
         "_id": "quake-1",
         "magnitude": 4.2,
-        "place": "Los Angeles, CA",
-        "time": 300,
-        "updated": 350,
+        "place": "Los Angeles",
+        "original_place": "1 km SW of Los Angeles, CA",
+        "time": datetime(2025, 1, 3, 12, 0, tzinfo=UTC),
+        "updated": datetime(2025, 1, 3, 12, 5, tzinfo=UTC),
         "title": "M 4.2 - Los Angeles, CA",
         "url": "https://example.com/quake-1",
         "status": "reviewed",
@@ -98,9 +100,10 @@ EARTHQUAKE_FIXTURES = [
     {
         "_id": "quake-2",
         "magnitude": 3.1,
-        "place": "Gardena, CA",
-        "time": 200,
-        "updated": 220,
+        "place": "Gardena",
+        "original_place": "4 km NNE of Gardena, CA",
+        "time": datetime(2025, 1, 2, 12, 0, tzinfo=UTC),
+        "updated": datetime(2025, 1, 2, 12, 5, tzinfo=UTC),
         "title": "M 3.1 - Gardena, CA",
         "url": "https://example.com/quake-2",
         "status": "reviewed",
@@ -113,9 +116,10 @@ EARTHQUAKE_FIXTURES = [
     {
         "_id": "quake-3",
         "magnitude": 2.8,
-        "place": "Pasadena, CA",
-        "time": 100,
-        "updated": 120,
+        "place": "Pasadena",
+        "original_place": "2 km S of Pasadena, CA",
+        "time": datetime(2025, 1, 1, 12, 0, tzinfo=UTC),
+        "updated": datetime(2025, 1, 1, 12, 5, tzinfo=UTC),
         "title": "M 2.8 - Pasadena, CA",
         "url": "https://example.com/quake-3",
         "status": "reviewed",
@@ -209,6 +213,9 @@ def test_earthquake_list_endpoint(monkeypatch) -> None:
         payload = response.json()
         assert payload["count"] == 3
         assert len(payload["items"]) == 3
+        assert payload["items"][1]["place"] == "Gardena"
+        assert payload["items"][1]["original_place"] == "4 km NNE of Gardena, CA"
+        assert payload["items"][0]["time"].endswith("Z")
 
 
 def test_earthquake_summary_endpoint(monkeypatch) -> None:
@@ -220,6 +227,19 @@ def test_earthquake_summary_endpoint(monkeypatch) -> None:
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_earthquakes"] > 0
+        assert payload["latest_earthquake_time"].endswith("Z")
+
+
+def test_earthquake_place_filter_uses_normalized_locality(monkeypatch) -> None:
+    install_fake_db(monkeypatch)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/earthquakes?place=Gardena")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["count"] == 1
+        assert payload["items"][0]["place"] == "Gardena"
 
 
 def test_dataset_catalog_endpoint(monkeypatch) -> None:

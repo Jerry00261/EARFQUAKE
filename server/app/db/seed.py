@@ -1,5 +1,7 @@
 import csv
 import json
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +9,26 @@ from pymongo import UpdateOne
 
 from app.db.mongo import earthquakes_collection, receivers_collection, source_locations_collection
 from app.core.config import settings
+
+
+def _parse_epoch_milliseconds(value: int | float | None) -> datetime | None:
+    if value is None:
+        return None
+
+    return datetime.fromtimestamp(value / 1000, tz=UTC)
+
+
+def _extract_california_locality(place: str | None) -> str | None:
+    if not place:
+        return None
+
+    base = place.split(",")[0].strip()
+    match = re.search(r"\bof\s+(.+)$", base)
+
+    if match:
+        return match.group(1).strip()
+
+    return base
 
 
 def _seed_earthquakes(data_dir: Path) -> int:
@@ -29,9 +51,10 @@ def _seed_earthquakes(data_dir: Path) -> int:
         document = {
             "_id": earthquake_id,
             "magnitude": properties.get("mag"),
-            "place": properties.get("place"),
-            "time": properties.get("time"),
-            "updated": properties.get("updated"),
+            "place": _extract_california_locality(properties.get("place")),
+            "original_place": properties.get("place"),
+            "time": _parse_epoch_milliseconds(properties.get("time")),
+            "updated": _parse_epoch_milliseconds(properties.get("updated")),
             "title": properties.get("title"),
             "url": properties.get("url"),
             "status": properties.get("status"),
@@ -49,6 +72,7 @@ def _seed_earthquakes(data_dir: Path) -> int:
     collection.create_index("time")
     collection.create_index("magnitude")
     collection.create_index("place")
+    collection.create_index("original_place")
     return len(operations)
 
 
