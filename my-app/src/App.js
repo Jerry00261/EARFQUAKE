@@ -21,7 +21,6 @@ import {
   subscribeToEarthquakeFeed,
 } from './services/earthquakeService';
 import {
-  fetchSeismicEarthquakes,
   fetchHeatmap,
   fetchPrediction,
   fetchSeismogram,
