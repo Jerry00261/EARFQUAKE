@@ -12,38 +12,16 @@ function DashboardPanel({ locationHistory, minMag, onClose, panelOpen, selectedE
     [yearEvents, minMag]
   );
 
-  const [eventIndex, setEventIndex] = useState(0);
+  const [clusterCardOpen, setClusterCardOpen] = useState(false);
   const prevLocationRef = useRef(null);
 
-  // Reset index only when the selected location changes (not when cycling)
   useEffect(() => {
     const loc = selectedEarthquake?.locationId ?? null;
     if (loc !== prevLocationRef.current) {
       prevLocationRef.current = loc;
-      setEventIndex(0);
+      setClusterCardOpen(false);
     }
   }, [selectedEarthquake?.locationId]);
-
-  // Clamp index if filteredYearEvents shrinks (e.g. minMag changes)
-  useEffect(() => {
-    if (filteredYearEvents.length > 0 && eventIndex >= filteredYearEvents.length) {
-      setEventIndex(0);
-    }
-  }, [filteredYearEvents.length, eventIndex]);
-
-  const hasMultiple = filteredYearEvents.length > 1;
-
-  const handleNext = useCallback(() => {
-    setEventIndex((i) => (i + 1) % filteredYearEvents.length);
-  }, [filteredYearEvents.length]);
-
-  const handlePrev = useCallback(() => {
-    setEventIndex((i) => (i - 1 + filteredYearEvents.length) % filteredYearEvents.length);
-  }, [filteredYearEvents.length]);
-
-  const displayQuake = hasMultiple && filteredYearEvents[eventIndex]
-    ? filteredYearEvents[eventIndex]
-    : selectedEarthquake;
 
   const yearStats = useMemo(() => {
     if (!filteredYearEvents || filteredYearEvents.length === 0) return null;
@@ -57,77 +35,160 @@ function DashboardPanel({ locationHistory, minMag, onClose, panelOpen, selectedE
     };
   }, [filteredYearEvents]);
 
+  const individualEvents = useMemo(() => {
+    if (filteredYearEvents.length > 0) {
+      return filteredYearEvents;
+    }
+
+    return selectedEarthquake ? [selectedEarthquake] : [];
+  }, [filteredYearEvents, selectedEarthquake]);
+
+  const formatEventTime = useCallback((timestamp) => {
+    if (!timestamp) {
+      return 'Unknown';
+    }
+
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(timestamp));
+  }, []);
+
+  const clusterLabel = selectedEarthquake?.place || selectedEarthquake?.originalPlace || 'No selection';
+
   return (
-    <aside className={`dashboard-panel${panelOpen ? ' is-open' : ''}`}>
+    <aside className={`dashboard-panel${panelOpen ? ' is-open' : ''}${clusterCardOpen ? ' cluster-open' : ''}`}>
       <button className="panel-close-btn" onClick={onClose} aria-label="Close panel">×</button>
 
-      {hasMultiple ? (
-        <button className="event-nav-circle event-nav-left" onClick={handlePrev} aria-label="Previous event">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2.5L4.5 7L9 11.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      ) : null}
+      <div className="panel-card-row">
+        <div className={`cluster-card-shell${clusterCardOpen ? ' is-open' : ''}`}>
+          <section className="panel-card panel-card-cluster">
+            <div className="panel-header">
+              <div>
+                <span className="eyebrow">Cluster Statistics</span>
+                <h3>{clusterLabel}</h3>
+              </div>
+            </div>
 
-      {hasMultiple ? (
-        <button className="event-nav-circle event-nav-right" onClick={handleNext} aria-label="Next event">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M5 2.5L9.5 7L5 11.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      ) : null}
+            {selectedEarthquake && yearStats ? (
+              <>
+                <div className="detail-grid">
+                  <div className="detail">
+                    <label>Events</label>
+                    <strong>{yearStats.count}</strong>
+                    <span>Earthquakes in this cluster</span>
+                  </div>
+                  <div className="detail">
+                    <label>Average</label>
+                    <strong>{yearStats.mean}</strong>
+                    <span>Mean magnitude</span>
+                  </div>
+                  <div className="detail">
+                    <label>Strongest</label>
+                    <strong data-accent="true">{yearStats.strongest.toFixed(2)}</strong>
+                    <span>Highest event</span>
+                  </div>
+                  <div className="detail">
+                    <label>Weakest</label>
+                    <strong>{yearStats.weakest.toFixed(2)}</strong>
+                    <span>Lowest event</span>
+                  </div>
+                  <div className="detail detail-span-2">
+                    <label>Cluster Location</label>
+                    <strong>{selectedEarthquake.place}</strong>
+                    <span>Shared locality for this event stack</span>
+                  </div>
+                </div>
 
-      <section className="panel-card">
-        <div className="panel-header">
-          <div>
-            <span className="eyebrow">Seismic Zone</span>
-            <h2>{displayQuake ? displayQuake.place : 'No selection'}</h2>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {displayQuake ? (
-              <strong style={{ fontSize: '1.5rem', color: '#ef6c00' }}>
-                M {displayQuake.mag.toFixed(2)}
-              </strong>
-            ) : null}
-            {hasMultiple ? (
-              <span className="event-nav-badge">{eventIndex + 1}/{filteredYearEvents.length}</span>
-            ) : null}
-          </div>
+                {filteredHistory.length > 0 ? (
+                  <Histogram history={filteredHistory} selectedYear={selectedYear} />
+                ) : null}
+              </>
+            ) : (
+              <div className="empty-state">
+                Cluster-level statistics appear here once a map point is selected.
+              </div>
+            )}
+          </section>
         </div>
 
-        {displayQuake && yearStats ? (
-          <div className="detail-grid">
-            <div className="detail">
-              <label>Events</label>
-              <strong>{yearStats.count}</strong>
-              <span>Earthquakes recorded</span>
+        <section className="panel-card panel-card-primary">
+          <div className="panel-header">
+            <div>
+              <span className="eyebrow">Individual Event</span>
+              <h2>{selectedEarthquake ? selectedEarthquake.place : 'No selection'}</h2>
             </div>
-            <div className="detail">
-              <label>Strongest</label>
-              <strong data-accent="true">{yearStats.strongest.toFixed(2)}</strong>
-              <span>Max magnitude</span>
-            </div>
-            <div className="detail">
-              <label>Weakest</label>
-              <strong>{yearStats.weakest.toFixed(2)}</strong>
-              <span>Min magnitude</span>
-            </div>
-            <div className="detail">
-              <label>Location</label>
-              <strong>{displayQuake.lat.toFixed(4)}°, {displayQuake.lng.toFixed(4)}°</strong>
-              <span>Epicenter zone</span>
-            </div>
+            {individualEvents.length > 1 ? (
+              <span className="event-nav-badge">{individualEvents.length} events</span>
+            ) : null}
           </div>
-        ) : (
-          <div className="empty-state">
-            Click a location on the map to view its seismic history.
-          </div>
-        )}
-      </section>
 
-      {selectedEarthquake && filteredHistory.length > 0 ? (
-        <Histogram history={filteredHistory} selectedYear={selectedYear} />
-      ) : null}
+          {individualEvents.length > 0 ? (
+            <>
+              <div className="panel-action-strip">
+                <button
+                  className={`cluster-toggle-btn${clusterCardOpen ? ' is-open' : ''}`}
+                  onClick={() => setClusterCardOpen((open) => !open)}
+                  type="button"
+                >
+                  <span>{clusterCardOpen ? 'Hide Cluster Stats' : 'Show Cluster Stats'}</span>
+                  <span className="cluster-toggle-arrow" aria-hidden="true">‹</span>
+                </button>
+              </div>
+
+              <div className="individual-events-scroll">
+                {individualEvents.map((quake, index) => {
+                  const displayDepth = quake.depth != null ? `${quake.depth.toFixed(2)} km` : 'Unknown';
+                  const displayLocation = `${quake.lat.toFixed(4)}°, ${quake.lng.toFixed(4)}°`;
+
+                  return (
+                    <article
+                      className={`individual-event-card${
+                        quake.id === selectedEarthquake?.id ? ' is-highlighted' : ''
+                      }`}
+                      key={quake.id}
+                    >
+                      <div className="individual-event-head">
+                        <div>
+                          <span className="individual-event-index">Event {index + 1}</span>
+                          <h3>{quake.originalPlace}</h3>
+                        </div>
+                      </div>
+
+                      <div className="detail-grid individual-detail-grid">
+                        <div className="detail">
+                          <label>Magnitude</label>
+                          <strong data-accent="true">{quake.mag.toFixed(2)}</strong>
+                          <span>Selected event intensity</span>
+                        </div>
+                        <div className="detail">
+                          <label>Location</label>
+                          <strong>{displayLocation}</strong>
+                          <span>{quake.place}</span>
+                        </div>
+                        <div className="detail">
+                          <label>Time</label>
+                          <strong>{formatEventTime(quake.timestamp)}</strong>
+                          <span>Event occurrence</span>
+                        </div>
+                        <div className="detail">
+                          <label>Depth</label>
+                          <strong>{displayDepth}</strong>
+                          <span>Below the surface</span>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="empty-state">
+              Click a location on the map to inspect an individual event and reveal its cluster context.
+            </div>
+          )}
+        </section>
+      </div>
     </aside>
   );
 }

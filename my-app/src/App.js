@@ -23,7 +23,6 @@ function App() {
   const [hoveredId, setHoveredId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedYear, setSelectedYear] = useState(2026);
   const [minMag, setMinMag] = useState(0);
   const selectedLocationRef = useRef(null);
@@ -56,7 +55,7 @@ function App() {
         }
       } catch (loadError) {
         if (isMounted) {
-          setError(loadError.message || 'Unable to load mock earthquakes.');
+          console.error(loadError.message || 'Unable to load mock earthquakes.');
         }
       } finally {
         if (isMounted) {

@@ -6,9 +6,11 @@ function mapEarthquake(item) {
     id: item.id,
     locationId: item.place || 'unknown',
     place: item.place || item.original_place || 'Unknown',
+    originalPlace: item.original_place || item.place || 'Unknown',
     lat: item.latitude,
     lng: item.longitude,
     mag: item.magnitude,
+    depth: item.depth,
     year: item.time ? new Date(item.time).getFullYear() : null,
     timestamp: item.time,
   };

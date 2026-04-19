@@ -25,12 +25,10 @@ function Histogram({ history, selectedYear }) {
     [history, selectedYear]
   );
 
-  const { counts, maxCount, mean } = useMemo(() => {
+  const { counts, maxCount } = useMemo(() => {
     const c = BINS.map(() => 0);
-    let sum = 0;
 
     for (const quake of filtered) {
-      sum += quake.mag;
       for (let i = 0; i < BINS.length; i++) {
         if (quake.mag >= BINS[i].min && quake.mag < BINS[i].max) {
           c[i]++;
@@ -42,7 +40,6 @@ function Histogram({ history, selectedYear }) {
     return {
       counts: c,
       maxCount: Math.max(...c, 1),
-      mean: filtered.length ? (sum / filtered.length).toFixed(2) : '—',
     };
   }, [filtered]);
 
@@ -50,9 +47,6 @@ function Histogram({ history, selectedYear }) {
     <div className="histogram-container">
       <div className="histogram-header">
         <span className="eyebrow">Magnitude Distribution</span>
-        <span className="histogram-mean">
-          Avg: <strong>{mean}</strong>
-        </span>
       </div>
       <div className="histogram-chart">
         {BINS.map((bin, i) => (
