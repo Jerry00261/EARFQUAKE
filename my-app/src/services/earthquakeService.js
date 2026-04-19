@@ -4,13 +4,18 @@ const API_PREFIX = '/api/v1';
 function mapEarthquake(item) {
   return {
     id: item.id,
-    locationId: item.place || 'unknown',
+    source: item.source || null,
+    locationId: item.place || `${item.lat},${item.lon}`,
     place: item.place || item.original_place || 'Unknown',
     originalPlace: item.original_place || item.place || 'Unknown',
-    lat: item.latitude,
-    lng: item.longitude,
-    mag: item.magnitude,
+    lat: item.lat,
+    lng: item.lon,
+    mag: item.mag,
     depth: item.depth,
+    vs30: item.vs30 || null,
+    siteClass: item.site_class || null,
+    mmi: item.mmi || null,
+    sig: item.sig || null,
     year: item.time ? new Date(item.time).getFullYear() : null,
     timestamp: item.time,
   };
