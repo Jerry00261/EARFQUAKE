@@ -1,88 +1,75 @@
-import { allEarthquakes, mockEarthquakes } from '../data/mockEarthquakes';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_PREFIX = '/api/v1';
 
-let nextEarthquakeId = allEarthquakes.length + 1;
-
-const HOTSPOTS = [
-  { locationId: 'dtla', place: 'Downtown Los Angeles', lat: 34.0522, lng: -118.2437 },
-  { locationId: 'longbeach', place: 'Long Beach Shelf', lat: 33.7701, lng: -118.1937 },
-  { locationId: 'sanbernardino', place: 'San Bernardino Valley', lat: 34.1083, lng: -117.2898 },
-  { locationId: 'palmsprings', place: 'Palm Springs Basin', lat: 33.8303, lng: -116.5453 },
-  { locationId: 'riverside', place: 'Riverside Plain', lat: 33.9806, lng: -117.3755 },
-  { locationId: 'ventura', place: 'Ventura Offshore', lat: 34.2746, lng: -119.229 },
-  { locationId: 'imperial', place: 'Imperial Valley North', lat: 32.8473, lng: -115.5694 },
-  { locationId: 'pasadena', place: 'Pasadena Arc', lat: 34.1478, lng: -118.1445 },
-];
-
-function delay(milliseconds) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, milliseconds);
-  });
-}
-
-function round(value, digits = 4) {
-  return Number(value.toFixed(digits));
-}
-
-function createRandomEarthquake() {
-  const hotspot = HOTSPOTS[Math.floor(Math.random() * HOTSPOTS.length)];
-  const isHighMagnitude = Math.random() > 0.74;
-  const magnitude = isHighMagnitude
-    ? 5 + Math.random() * 1.2
-    : 2.6 + Math.random() * 2.3;
-  const latOffset = (Math.random() - 0.5) * 0.22;
-  const lngOffset = (Math.random() - 0.5) * 0.28;
-
+function mapEarthquake(item) {
   return {
-    id: nextEarthquakeId++,
-    locationId: hotspot.locationId,
-    place: hotspot.place,
-    lat: round(hotspot.lat + latOffset),
-    lng: round(hotspot.lng + lngOffset),
-    mag: round(magnitude, 1),
-    year: new Date().getFullYear(),
-    timestamp: new Date().toISOString(),
+    id: item.id,
+    locationId: item.place || 'unknown',
+    place: item.place || item.original_place || 'Unknown',
+    originalPlace: item.original_place || item.place || 'Unknown',
+    lat: item.latitude,
+    lng: item.longitude,
+    mag: item.magnitude,
+    depth: item.depth,
+    year: item.time ? new Date(item.time).getFullYear() : null,
+    timestamp: item.time,
   };
 }
 
 export async function getEarthquakes(year) {
-  await delay(180);
-  const source = year != null
-    ? allEarthquakes.filter((q) => q.year === year)
-    : mockEarthquakes;
+  const response = await fetch(
+    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&sort_by=time`
+  );
+  if (!response.ok) throw new Error('Failed to fetch earthquakes');
+  const data = await response.json();
+
+  let items = data.items.map(mapEarthquake);
+
+  if (year != null) {
+    items = items.filter((q) => q.year === year);
+  }
 
   // Group by location, pick strongest event per location
   const byLocation = new Map();
-  for (const q of source) {
+  for (const q of items) {
+    if (q.mag == null) continue;
     const existing = byLocation.get(q.locationId);
     if (!existing || q.mag > existing.mag) {
       byLocation.set(q.locationId, q);
     }
   }
 
-  return [...byLocation.values()].sort(
+  const locations = [...byLocation.values()].sort(
     (left, right) => new Date(right.timestamp) - new Date(left.timestamp)
   );
+
+  return { locations, totalCount: items.filter((q) => q.mag != null).length };
 }
 
-export function getLocationHistory(locationId) {
-  return allEarthquakes
-    .filter((q) => q.locationId === locationId)
-    .sort((a, b) => a.year - b.year);
+export async function getLocationHistory(locationId) {
+  const response = await fetch(
+    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=time`
+  );
+  if (!response.ok) throw new Error('Failed to fetch location history');
+  const data = await response.json();
+
+  return data.items.map(mapEarthquake).sort((a, b) => a.year - b.year);
 }
 
-export function getLocationYearEvents(locationId, year) {
-  return allEarthquakes
-    .filter((q) => q.locationId === locationId && q.year === year)
+export async function getLocationYearEvents(locationId, year) {
+  const response = await fetch(
+    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=magnitude`
+  );
+  if (!response.ok) throw new Error('Failed to fetch location events');
+  const data = await response.json();
+
+  return data.items
+    .map(mapEarthquake)
+    .filter((q) => q.year === year)
     .sort((a, b) => b.mag - a.mag);
 }
 
-export function subscribeToEarthquakeFeed(onEvent, options = {}) {
-  const intervalMs = options.intervalMs ?? 9000;
-  const intervalId = window.setInterval(() => {
-    onEvent(createRandomEarthquake());
-  }, intervalMs);
-
-  return () => {
-    window.clearInterval(intervalId);
-  };
+export function subscribeToEarthquakeFeed(_onEvent, _options = {}) {
+  // No real-time feed from the backend yet
+  return () => {};
 }
