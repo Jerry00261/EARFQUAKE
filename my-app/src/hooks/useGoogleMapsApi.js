@@ -41,7 +41,7 @@ function loadGoogleMapsApi(apiKey) {
     script.id = GOOGLE_MAPS_SCRIPT_ID;
     script.async = true;
     script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&libraries=geometry`;
     script.addEventListener('load', onLoad, { once: true });
     script.addEventListener('error', onError, { once: true });
     document.head.appendChild(script);

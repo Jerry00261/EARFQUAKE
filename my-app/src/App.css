@@ -59,6 +59,12 @@ select {
   inset: 0;
 }
 
+.map-stage.streetview-active .map-overlay,
+.map-stage.streetview-active .map-legend,
+.map-stage.streetview-active .aura-canvas {
+  display: none !important;
+}
+
 .map-canvas {
   position: absolute;
   inset: 0;

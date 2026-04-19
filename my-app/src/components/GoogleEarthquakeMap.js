@@ -134,8 +134,49 @@ function GoogleEarthquakeMap({
     overlayRef.current = overlay;
 
     const sv = map.getStreetView();
+    const svService = new window.google.maps.StreetViewService();
+
+    // Restrict to outdoor imagery only
+    sv.setOptions({
+      source: window.google.maps.StreetViewSource.OUTDOOR,
+    });
+
+    let svVerified = false;
+
     sv.addListener('visible_changed', () => {
-      setStreetViewActive(sv.getVisible());
+      const visible = sv.getVisible();
+
+      if (visible && !svVerified) {
+        // Immediately hide before the user sees anything
+        sv.setVisible(false);
+
+        const dropPos = sv.getPosition();
+        if (!dropPos) return;
+
+        // Find nearest panorama within 500m
+        svService.getPanorama(
+          { location: dropPos, radius: 500, source: window.google.maps.StreetViewSource.OUTDOOR },
+          (data, svStatus) => {
+            if (svStatus === window.google.maps.StreetViewStatus.OK) {
+              svVerified = true;
+              const panoLatLng = data.location.latLng;
+              // Compute heading from panorama to the actual drop point
+              const heading = window.google.maps.geometry
+                ? window.google.maps.geometry.spherical.computeHeading(panoLatLng, dropPos)
+                : 0;
+              sv.setPano(data.location.pano);
+              sv.setPov({ heading, pitch: 0 });
+              sv.setVisible(true);
+            }
+          }
+        );
+      } else if (visible && svVerified) {
+        svVerified = false;
+        setStreetViewActive(true);
+      } else if (!visible) {
+        svVerified = false;
+        setStreetViewActive(false);
+      }
     });
 
     return () => {
@@ -294,7 +335,7 @@ function GoogleEarthquakeMap({
   }, [error, loading, status]);
 
   return (
-    <div className="map-stage">
+    <div className={`map-stage${streetViewActive ? ' streetview-active' : ''}`}>
       <div className="map-canvas" ref={mapNodeRef} />
 
       {status === 'loaded' && overlayReady && !streetViewActive ? (
