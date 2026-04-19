@@ -1015,9 +1015,12 @@ select {
   inset: 0;
 }
 
-.seismic-map-stage .seismic-streetview-container {
+.seismic-streetview-container {
   position: absolute;
   inset: 0;
+}
+
+.seismic-map-stage .seismic-streetview-container {
   transform: translate(0px, 0px);
   will-change: transform;
 }
@@ -1029,6 +1032,35 @@ select {
 
 .seismic-map-stage.streetview-active .map-overlay,
 .seismic-map-stage.streetview-active .map-legend {
+  display: none !important;
+}
+
+.streetview-back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  border: 1px solid rgba(140, 170, 220, 0.24);
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e8edf5;
+  background: rgba(12, 18, 32, 0.88);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.streetview-back-btn:hover {
+  background: rgba(18, 28, 44, 0.94);
+  border-color: rgba(239, 108, 0, 0.35);
+}
+
+/* Hide Google's native street view back button during seismic shake */
+.seismic-map-stage .gm-iv-back,
+.seismic-map-stage .gm-iv-close {
   display: none !important;
 }
 
@@ -1053,6 +1085,23 @@ select {
 .streetview-shake-toggle:hover {
   background: rgba(18, 28, 44, 0.94);
   border-color: rgba(239, 108, 0, 0.35);
+}
+
+.no-streetview-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(12, 18, 32, 0.92);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 18px 28px;
+  color: #f59e0b;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 20;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .seismic-map-stage .map-overlay {

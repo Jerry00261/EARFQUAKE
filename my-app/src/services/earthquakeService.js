@@ -22,7 +22,7 @@ function mapEarthquake(item) {
 }
 
 export async function getEarthquakes(year) {
-  let url = `${API_BASE}${API_PREFIX}/earthquakes?limit=500&sort_by=time`;
+  let url = `${API_BASE}${API_PREFIX}/earthquakes?sort_by=time`;
   if (year != null) {
     url += `&year=${year}`;
   }
@@ -51,7 +51,7 @@ export async function getEarthquakes(year) {
 
 export async function getLocationHistory(locationId) {
   const response = await fetch(
-    `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=time`
+    `${API_BASE}${API_PREFIX}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=time`
   );
   if (!response.ok) throw new Error('Failed to fetch location history');
   const data = await response.json();
@@ -60,7 +60,7 @@ export async function getLocationHistory(locationId) {
 }
 
 export async function getLocationYearEvents(locationId, year) {
-  let url = `${API_BASE}${API_PREFIX}/earthquakes?limit=500&place=${encodeURIComponent(locationId)}&sort_by=magnitude`;
+  let url = `${API_BASE}${API_PREFIX}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=magnitude`;
   if (year != null) {
     url += `&year=${year}`;
   }

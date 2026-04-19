@@ -1,51 +1,35 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { useGoogleMapsApi } from '../hooks/useGoogleMapsApi';
-
-const CA_CENTER = { lat: 36.77, lng: -119.42 };
-
-const MAP_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#1c2a3a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9bb8' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#141e2e' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2e4058' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e2e40' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a3028' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243446' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2c3e52' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#111c2a' }] },
-];
 
 const TIER_COLORS = { extreme: '#ef4444', high: '#f97316', medium: '#facc15', low: '#4ade80' };
 
 function SeismicRiskMap({
-  earthquakes,
+  map,
+  streetViewContainerRef,
+  mapApiStatus,
+  mapApiError,
   heatmapPoints,
   onMapClick,
   pinLatLng,
   panelOpen,
   seismogram,
   onPlayheadFrameChange,
+  seekTarget,
+  streetViewActive,
+  onStreetViewChange,
 }) {
-  const { status, error } = useGoogleMapsApi();
-  const mapNodeRef = useRef(null);
-  const streetViewContainerRef = useRef(null);
-  const mapRef = useRef(null);
   const pinMarkerRef = useRef(null);
-  const quakeMarkersRef = useRef([]);
   const heatmapRectsRef = useRef([]);
   const shakeIntervalRef = useRef(null);
   const shakeEnabledRef = useRef(true);
-  const [mapReady, setMapReady] = useState(false);
-  const [streetViewActive, setStreetViewActive] = useState(false);
   const [streetViewSession, setStreetViewSession] = useState(0);
   const [shakeEnabled, setShakeEnabled] = useState(true);
+  const [noStreetViewMsg, setNoStreetViewMsg] = useState(false);
 
   const resetStreetViewTransform = useCallback(() => {
     if (streetViewContainerRef.current) {
       streetViewContainerRef.current.style.transform = 'translate(0px, 0px)';
     }
-  }, []);
+  }, [streetViewContainerRef]);
 
   const stopShakeAnimation = useCallback(() => {
     if (shakeIntervalRef.current) {
@@ -62,71 +46,78 @@ function SeismicRiskMap({
     }
   }, [shakeEnabled, resetStreetViewTransform]);
 
-  // Initialize map
+  // Street view listener + map click
   useEffect(() => {
-    if (status !== 'loaded' || mapRef.current || !mapNodeRef.current) return;
+    if (!map) return;
 
-    const map = new window.google.maps.Map(mapNodeRef.current, {
-      center: CA_CENTER,
-      zoom: 6,
-      minZoom: 5,
-      maxZoom: 14,
-      disableDefaultUI: true,
-      zoomControl: true,
-      streetViewControl: true,
-      clickableIcons: false,
-      gestureHandling: 'greedy',
-      backgroundColor: '#1c2a3a',
-      styles: MAP_STYLES,
-    });
-
-    map.setOptions({
-      streetViewControlOptions: {
-        position: window.google.maps.ControlPosition.LEFT_BOTTOM,
-      },
-    });
-
-    mapRef.current = map;
-    setMapReady(true);
-
-    // Click on map also triggers prediction
-    map.addListener('click', (e) => {
-      if (!e.latLng) return;
-      onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-    });
-
-    // Use pegman drop position for prediction while letting Street View stay visible.
     const sv = map.getStreetView();
-    sv.addListener('visible_changed', () => {
+    let skipVisibilityChange = false;
+
+    const svListener = sv.addListener('visible_changed', () => {
+      if (skipVisibilityChange) return;
       const visible = sv.getVisible();
-      setStreetViewActive(visible);
 
       if (visible) {
         const dropPos = sv.getPosition();
-        if (dropPos) {
-          onMapClick({ lat: dropPos.lat(), lng: dropPos.lng() });
+        if (!dropPos) {
+          skipVisibilityChange = true;
+          sv.setVisible(false);
+          skipVisibilityChange = false;
+          onStreetViewChange(false);
+          return;
         }
-        setStreetViewSession((session) => session + 1);
+
+        const svSvc = new window.google.maps.StreetViewService();
+        svSvc.getPanorama(
+          { location: { lat: dropPos.lat(), lng: dropPos.lng() }, radius: 50 },
+          (result, svStatus) => {
+            if (
+              svStatus === window.google.maps.StreetViewStatus.OK &&
+              result?.location?.latLng
+            ) {
+              sv.setPosition(result.location.latLng);
+              onStreetViewChange(true);
+              onMapClick({
+                lat: result.location.latLng.lat(),
+                lng: result.location.latLng.lng(),
+              });
+              setStreetViewSession((s) => s + 1);
+            } else {
+              skipVisibilityChange = true;
+              sv.setVisible(false);
+              skipVisibilityChange = false;
+              onStreetViewChange(false);
+              setNoStreetViewMsg(true);
+              setTimeout(() => setNoStreetViewMsg(false), 3000);
+            }
+          }
+        );
       } else {
+        onStreetViewChange(false);
         stopShakeAnimation();
         onPlayheadFrameChange?.(null);
       }
     });
 
+    const clickListener = map.addListener('click', (e) => {
+      if (!e.latLng) return;
+      onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    });
+
     return () => {
-      window.google.maps.event.clearInstanceListeners(map);
-      window.google.maps.event.clearInstanceListeners(sv);
-      mapRef.current = null;
+      svListener.remove();
+      clickListener.remove();
     };
-  }, [status, onMapClick, onPlayheadFrameChange, stopShakeAnimation]);
+  }, [map, onMapClick, onPlayheadFrameChange, onStreetViewChange, stopShakeAnimation]);
 
   // Resize on panel toggle
   useEffect(() => {
-    if (mapRef.current) {
-      window.google.maps.event.trigger(mapRef.current, 'resize');
+    if (map) {
+      window.google.maps.event.trigger(map, 'resize');
     }
-  }, [panelOpen]);
+  }, [map, panelOpen]);
 
+  // Shake animation
   useEffect(() => {
     if (!streetViewActive) {
       stopShakeAnimation();
@@ -146,7 +137,9 @@ function SeismicRiskMap({
     stopShakeAnimation();
 
     const totalFrames = Math.min(600, px.length, py.length);
-    let frame = 0;
+    let frame = seekTarget ? Math.max(0, Math.min(seekTarget.frame, totalFrames - 1)) : 0;
+
+    onPlayheadFrameChange?.(frame);
 
     shakeIntervalRef.current = setInterval(() => {
       if (frame >= totalFrames) {
@@ -175,9 +168,11 @@ function SeismicRiskMap({
   }, [
     onPlayheadFrameChange,
     resetStreetViewTransform,
+    seekTarget,
     seismogram,
     stopShakeAnimation,
     streetViewActive,
+    streetViewContainerRef,
     streetViewSession,
   ]);
 
@@ -188,9 +183,8 @@ function SeismicRiskMap({
 
   // Draw heatmap tiles
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !heatmapPoints) return;
+    if (!map || !heatmapPoints) return;
 
-    // Clear old rects
     heatmapRectsRef.current.forEach((r) => r.setMap(null));
     heatmapRectsRef.current = [];
 
@@ -208,7 +202,7 @@ function SeismicRiskMap({
         fillOpacity: 0.22,
         strokeWeight: 0,
         clickable: false,
-        map: mapRef.current,
+        map: map,
         zIndex: 0,
       });
     });
@@ -218,41 +212,11 @@ function SeismicRiskMap({
     return () => {
       rects.forEach((r) => r.setMap(null));
     };
-  }, [mapReady, heatmapPoints]);
-
-  // Draw earthquake dots
-  useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
-
-    quakeMarkersRef.current.forEach((c) => c.setMap(null));
-    quakeMarkersRef.current = [];
-
-    const markers = earthquakes.map((eq) => {
-      const radius = Math.max(2, eq.mag * 1.8);
-      return new window.google.maps.Circle({
-        center: { lat: eq.lat, lng: eq.lon },
-        radius: radius * 800,
-        fillColor: magToColor(eq.mag),
-        fillOpacity: 0.7,
-        strokeColor: magToColor(eq.mag),
-        strokeWeight: 0.5,
-        strokeOpacity: 0.9,
-        clickable: false,
-        map: mapRef.current,
-        zIndex: 1,
-      });
-    });
-
-    quakeMarkersRef.current = markers;
-
-    return () => {
-      markers.forEach((m) => m.setMap(null));
-    };
-  }, [mapReady, earthquakes]);
+  }, [map, heatmapPoints]);
 
   // Pin marker
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
+    if (!map) return;
 
     if (pinMarkerRef.current) {
       pinMarkerRef.current.setMap(null);
@@ -262,7 +226,7 @@ function SeismicRiskMap({
     if (pinLatLng) {
       const marker = new window.google.maps.Marker({
         position: { lat: pinLatLng.lat, lng: pinLatLng.lng },
-        map: mapRef.current,
+        map: map,
         draggable: true,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
@@ -283,26 +247,22 @@ function SeismicRiskMap({
       });
 
       pinMarkerRef.current = marker;
-      mapRef.current.panTo({ lat: pinLatLng.lat, lng: pinLatLng.lng });
+      map.panTo({ lat: pinLatLng.lat, lng: pinLatLng.lng });
     }
-  }, [mapReady, onMapClick, pinLatLng]);
+  }, [map, onMapClick, pinLatLng]);
 
   return (
-    <div className={`seismic-map-stage${streetViewActive ? ' streetview-active' : ''}`}>
-      <div className="seismic-streetview-container" ref={streetViewContainerRef}>
-        <div className="map-canvas" ref={mapNodeRef} />
-      </div>
-
+    <>
       <div className="map-overlay">
         <div className="map-badge">
           <h1>Seismic Risk Map</h1>
           <p>Drag the pegman or click anywhere to predict seismic risk and view a simulated seismogram.</p>
         </div>
-        {status === 'loading' && (
+        {mapApiStatus === 'loading' && (
           <div className="map-status"><strong>Loading map…</strong></div>
         )}
-        {status === 'error' && (
-          <div className="map-status"><strong>Map error</strong><p>{error}</p></div>
+        {mapApiStatus === 'error' && (
+          <div className="map-status"><strong>Map error</strong><p>{mapApiError}</p></div>
         )}
       </div>
 
@@ -314,12 +274,6 @@ function SeismicRiskMap({
             <span className="legend-label" style={{ textTransform: 'capitalize' }}>{tier}</span>
           </div>
         ))}
-        <div className="legend-divider" />
-        <div className="legend-title">Earthquake Dots</div>
-        <div className="legend-gradient-bar" />
-        <div className="legend-gradient-labels">
-          <span>3.0</span><span>5.0</span><span>7+</span>
-        </div>
         <div className="legend-divider" />
         <div className="legend-row">
           <span className="legend-marker" />
@@ -336,16 +290,14 @@ function SeismicRiskMap({
           {shakeEnabled ? 'Disable Shake' : 'Enable Shake'}
         </button>
       )}
-    </div>
-  );
-}
 
-function magToColor(mag) {
-  if (mag <= 3) return '#4ade80';
-  if (mag <= 4) return '#a0dc50';
-  if (mag <= 5) return '#facc15';
-  if (mag <= 6) return '#f58220';
-  return '#ef4444';
+      {noStreetViewMsg && (
+        <div className="no-streetview-overlay">
+          No Street View available at this location
+        </div>
+      )}
+    </>
+  );
 }
 
 export default memo(SeismicRiskMap);

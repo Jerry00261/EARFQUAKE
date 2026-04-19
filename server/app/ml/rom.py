@@ -87,13 +87,13 @@ def get_seismogram(
     waveform = y_pred[recv_idx]                    # (600,)
 
     # Scale amplitude by PGA
-    pgv_ms  = min(pga_g * 9.81 * 0.1, 1.0)
+    pgv_ms  = min(pga_g * 9.81 * 0.1, 5.0)
     ref_pgv = float(np.max(np.abs(waveform))) or 1e-6
     scale   = pgv_ms / ref_pgv
     scaled  = waveform * scale
 
-    px = (scaled * 40.0).tolist()
-    py = (np.roll(scaled, 12) * 0.75 * 40.0).tolist()
+    px = (scaled * 300.0).tolist()
+    py = (np.roll(scaled, 12) * 0.9 * 300.0).tolist()
 
     return {
         'receiver_index': recv_idx,

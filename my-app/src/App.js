@@ -11,6 +11,7 @@ import DashboardPanel from './components/DashboardPanel';
 import GoogleEarthquakeMap from './components/GoogleEarthquakeMap';
 import SeismicRiskMap from './components/SeismicRiskMap';
 import PredictionPanel from './components/PredictionPanel';
+import { useGoogleMapsApi } from './hooks/useGoogleMapsApi';
 import {
   getEarthquakes,
   getLocationHistory,
@@ -24,8 +25,36 @@ import {
   fetchSeismogram,
 } from './services/seismicService';
 
+const MAP_STYLES = [
+  { elementType: 'geometry', stylers: [{ color: '#1c2a3a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9bb8' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#141e2e' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2e4058' }] },
+  { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e2e40' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6a7d98' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a3028' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243446' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a2636' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2c3e52' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1e2e40' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#111c2a' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a6480' }] },
+];
+
 function App() {
   const [activeView, setActiveView] = useState('explorer');
+
+  // --- Shared map state ---
+  const { status: mapApiStatus, error: mapApiError } = useGoogleMapsApi();
+  const mapNodeRef = useRef(null);
+  const sharedMapRef = useRef(null);
+  const overlayRef = useRef(null);
+  const streetViewContainerRef = useRef(null);
+  const [sharedMapReady, setSharedMapReady] = useState(false);
+  const [overlayReady, setOverlayReady] = useState(false);
+  const [streetViewActive, setStreetViewActive] = useState(false);
 
   // --- Explorer view state ---
   const [earthquakes, setEarthquakes] = useState([]);
@@ -49,6 +78,69 @@ function App() {
   const [seismogramPlayheadFrame, setSeismogramPlayheadFrame] = useState(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [seismicPanelOpen, setSeismicPanelOpen] = useState(false);
+  const [seekTarget, setSeekTarget] = useState(null);
+  const seekIdRef = useRef(0);
+  const seismicDataLoadedRef = useRef(false);
+  const lastPredictCoordsRef = useRef(null);
+
+  // --- Create shared map once ---
+  useEffect(() => {
+    if (mapApiStatus !== 'loaded' || sharedMapRef.current || !mapNodeRef.current) return;
+
+    const map = new window.google.maps.Map(mapNodeRef.current, {
+      center: { lat: 33.92, lng: -117.97 },
+      zoom: 8,
+      minZoom: 5,
+      maxZoom: 14,
+      disableDefaultUI: true,
+      zoomControl: true,
+      streetViewControl: true,
+      clickableIcons: false,
+      gestureHandling: 'greedy',
+      backgroundColor: '#1c2a3a',
+      styles: MAP_STYLES,
+    });
+
+    map.setOptions({
+      streetViewControlOptions: {
+        position: window.google.maps.ControlPosition.LEFT_BOTTOM,
+      },
+    });
+
+    const overlay = new window.google.maps.OverlayView();
+    overlay.onAdd = () => {};
+    overlay.draw = () => setOverlayReady(true);
+    overlay.onRemove = () => setOverlayReady(false);
+    overlay.setMap(map);
+
+    sharedMapRef.current = map;
+    overlayRef.current = overlay;
+    setSharedMapReady(true);
+  }, [mapApiStatus]);
+
+  // Close street view when switching tabs
+  const handleTabSwitch = useCallback((view) => {
+    if (sharedMapRef.current) {
+      const sv = sharedMapRef.current.getStreetView();
+      if (sv.getVisible()) {
+        sv.setVisible(false);
+      }
+    }
+    setStreetViewActive(false);
+    setActiveView(view);
+  }, []);
+
+  const handleStreetViewChange = useCallback((active) => {
+    setStreetViewActive(active);
+  }, []);
+
+  const handleExitStreetView = useCallback(() => {
+    if (sharedMapRef.current) {
+      const sv = sharedMapRef.current.getStreetView();
+      if (sv.getVisible()) sv.setVisible(false);
+    }
+    setStreetViewActive(false);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -218,6 +310,7 @@ function App() {
   // --- Seismic Risk: load data on mount ---
   useEffect(() => {
     if (activeView !== 'seismic') return;
+    if (seismicDataLoadedRef.current) return;
     let cancelled = false;
 
     Promise.all([fetchSeismicEarthquakes(), fetchHeatmap()])
@@ -225,6 +318,7 @@ function App() {
         if (cancelled) return;
         setSeismicQuakes(quakes);
         setHeatmapPoints(hmap);
+        seismicDataLoadedRef.current = true;
       })
       .catch((err) => console.error('Seismic data load error:', err));
 
@@ -233,12 +327,22 @@ function App() {
 
   // --- Seismic Risk: map click handler ---
   const handleSeismicMapClick = useCallback(async (latLng) => {
+    const last = lastPredictCoordsRef.current;
+    const sameLocation = last &&
+      Math.abs(last.lat - latLng.lat) < 0.0001 &&
+      Math.abs(last.lng - latLng.lng) < 0.0001;
+
     setPinLatLng(latLng);
+    setSeismicPanelOpen(true);
+
+    if (sameLocation) return;
+
+    lastPredictCoordsRef.current = latLng;
     setPrediction(null);
     setSeismogram(null);
     setSeismogramPlayheadFrame(null);
+    setSeekTarget(null);
     setPredictionLoading(true);
-    setSeismicPanelOpen(true);
 
     try {
       const pred = await fetchPrediction(latLng.lat, latLng.lng);
@@ -259,45 +363,101 @@ function App() {
     setPrediction(null);
     setSeismogram(null);
     setSeismogramPlayheadFrame(null);
+    setSeekTarget(null);
+    lastPredictCoordsRef.current = null;
   }, []);
+
+  const handleSeismogramSeek = useCallback((frame) => {
+    seekIdRef.current += 1;
+    setSeekTarget({ frame, id: seekIdRef.current });
+  }, []);
+
+  const currentPanelOpen = activeView === 'explorer' ? panelOpen : seismicPanelOpen;
 
   return (
     <div className="app-shell">
       <nav className="app-tab-bar">
         <button
           className={`tab-btn${activeView === 'explorer' ? ' active' : ''}`}
-          onClick={() => setActiveView('explorer')}
+          onClick={() => handleTabSwitch('explorer')}
         >
           Explorer
         </button>
         <button
           className={`tab-btn${activeView === 'seismic' ? ' active' : ''}`}
-          onClick={() => setActiveView('seismic')}
+          onClick={() => handleTabSwitch('seismic')}
         >
           Seismic Risk
         </button>
       </nav>
 
-      {activeView === 'explorer' && (
-        <div className="app-frame">
-          <div className={`map-shell${panelOpen ? ' panel-open' : ''}`} ref={mapShellRef}>
-            <GoogleEarthquakeMap
-              earthquakes={filteredEarthquakes}
-              hoveredId={hoveredId}
-              loading={loading}
-              minMag={minMag}
-              onHover={handleHoverEarthquake}
-              onMinMagChange={setMinMag}
-              onSelect={handleSelectEarthquake}
-              onYearChange={setSelectedYear}
-              panelOpen={panelOpen}
-              selectedEarthquake={selectedEarthquake}
-              selectedId={selectedId}
-              selectedYear={selectedYear}
-              totalEventCount={totalEventCount}
-            />
-          </div>
+      <div className="app-frame">
+        <div
+          className={`map-shell${currentPanelOpen ? ' panel-open' : ''}`}
+          ref={mapShellRef}
+        >
+          <div className={`map-stage${activeView === 'seismic' ? ' seismic-map-stage' : ''}${streetViewActive ? ' streetview-active' : ''}`}>
+            <div className="seismic-streetview-container" ref={streetViewContainerRef}>
+              <div className="map-canvas" ref={mapNodeRef} />
+            </div>
 
+            {activeView === 'seismic' && streetViewActive && (
+              <button
+                className="streetview-back-btn"
+                type="button"
+                onClick={handleExitStreetView}
+              >
+                ← Back to Map
+              </button>
+            )}
+
+            {activeView === 'explorer' && sharedMapReady && (
+              <GoogleEarthquakeMap
+                map={sharedMapRef.current}
+                overlay={overlayRef.current}
+                overlayReady={overlayReady}
+                mapNode={mapNodeRef.current}
+                earthquakes={filteredEarthquakes}
+                hoveredId={hoveredId}
+                loading={loading}
+                mapApiStatus={mapApiStatus}
+                mapApiError={mapApiError}
+                minMag={minMag}
+                onHover={handleHoverEarthquake}
+                onMinMagChange={setMinMag}
+                onSelect={handleSelectEarthquake}
+                onYearChange={setSelectedYear}
+                panelOpen={panelOpen}
+                selectedEarthquake={selectedEarthquake}
+                selectedId={selectedId}
+                selectedYear={selectedYear}
+                streetViewActive={streetViewActive}
+                onStreetViewChange={handleStreetViewChange}
+                totalEventCount={totalEventCount}
+              />
+            )}
+
+            {activeView === 'seismic' && sharedMapReady && (
+              <SeismicRiskMap
+                map={sharedMapRef.current}
+                streetViewContainerRef={streetViewContainerRef}
+                mapApiStatus={mapApiStatus}
+                mapApiError={mapApiError}
+                heatmapPoints={heatmapPoints}
+                onMapClick={handleSeismicMapClick}
+                pinLatLng={pinLatLng}
+                panelOpen={seismicPanelOpen}
+                seismogram={seismogram}
+                onPlayheadFrameChange={setSeismogramPlayheadFrame}
+                seekTarget={seekTarget}
+                streetViewActive={streetViewActive}
+                onStreetViewChange={handleStreetViewChange}
+              />
+            )}
+          </div>
+        </div>
+
+        {activeView === 'explorer' && (
           <DashboardPanel
             locationHistory={locationHistory}
             minMag={minMag}
@@ -307,23 +467,9 @@ function App() {
             selectedYear={selectedYear}
             yearEvents={yearEvents}
           />
-        </div>
-      )}
+        )}
 
-      {activeView === 'seismic' && (
-        <div className="app-frame">
-          <div className={`map-shell${seismicPanelOpen ? ' panel-open' : ''}`}>
-            <SeismicRiskMap
-              earthquakes={seismicQuakes}
-              heatmapPoints={heatmapPoints}
-              onMapClick={handleSeismicMapClick}
-              pinLatLng={pinLatLng}
-              panelOpen={seismicPanelOpen}
-              seismogram={seismogram}
-              onPlayheadFrameChange={setSeismogramPlayheadFrame}
-            />
-          </div>
-
+        {activeView === 'seismic' && (
           <PredictionPanel
             prediction={prediction}
             seismogram={seismogram}
@@ -331,9 +477,10 @@ function App() {
             pinLatLng={pinLatLng}
             onClose={handleCloseSeismicPanel}
             loading={predictionLoading}
+            onSeek={handleSeismogramSeek}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

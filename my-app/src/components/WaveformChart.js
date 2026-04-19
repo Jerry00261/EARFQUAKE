@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -10,7 +10,14 @@ import {
   ReferenceLine,
 } from 'recharts';
 
-function WaveformChart({ waveformMs, sampleRateHz = 10, playheadFrame = null }) {
+function WaveformChart({ waveformMs, sampleRateHz = 10, playheadFrame = null, onSeek }) {
+  const handleChartClick = useCallback((state) => {
+    if (!onSeek || !state) return;
+    const { activeLabel } = state;
+    if (activeLabel == null) return;
+    const frame = Math.floor(activeLabel * sampleRateHz);
+    onSeek(Math.max(0, Math.min(599, frame)));
+  }, [onSeek, sampleRateHz]);
   const data = useMemo(() => {
     if (!waveformMs || waveformMs.length === 0) return [];
     return waveformMs.map((value, i) => ({
@@ -33,7 +40,12 @@ function WaveformChart({ waveformMs, sampleRateHz = 10, playheadFrame = null }) 
         <span className="eyebrow">Seismogram Waveform</span>
       </div>
       <ResponsiveContainer width="100%" height={180}>
-        <LineChart data={data} margin={{ top: 8, right: 12, left: -10, bottom: 4 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 8, right: 12, left: -10, bottom: 4 }}
+          onClick={handleChartClick}
+          style={{ cursor: onSeek ? 'pointer' : undefined }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(140,170,220,0.1)" />
           <XAxis
             dataKey="time"
