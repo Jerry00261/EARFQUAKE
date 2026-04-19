@@ -28,6 +28,7 @@ async def list_earthquakes(
     min_magnitude: float | None = Query(default=None, ge=0),
     site_class:    str | None   = Query(default=None),
     place:         str | None   = Query(default=None),
+    year:          int | None   = Query(default=None),
     sort_by:       str          = Query(default="time"),
 ) -> EarthquakeListResponse:
     query: dict = {}
@@ -37,6 +38,11 @@ async def list_earthquakes(
         query["site_class"] = site_class
     if place:
         query["place"] = place
+    if year is not None:
+        query["time"] = {
+            "$gte": datetime(year, 1, 1),
+            "$lt": datetime(year + 1, 1, 1),
+        }
 
     sort_field = "mag" if sort_by == "magnitude" else "time"
     cursor = earthquakes_collection().find(query).sort(sort_field, -1).limit(limit)
