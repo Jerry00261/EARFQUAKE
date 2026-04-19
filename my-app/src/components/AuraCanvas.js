@@ -2,37 +2,62 @@ import { memo, useEffect, useRef } from 'react';
 
 const PADDING = 200;
 
+// Continuous green → yellow → orange → red → dark red scale
+const COLOR_STOPS = [
+  { mag: 0, r: 74, g: 222, b: 128 },   // green
+  { mag: 1.5, r: 160, g: 220, b: 80 }, // yellow-green
+  { mag: 3, r: 250, g: 204, b: 21 },   // yellow
+  { mag: 4.5, r: 245, g: 130, b: 32 }, // orange
+  { mag: 6, r: 239, g: 68, b: 68 },    // red
+  { mag: 7, r: 160, g: 20, b: 20 },    // dark red
+];
+
+function magToColor(mag) {
+  if (mag <= COLOR_STOPS[0].mag) {
+    const s = COLOR_STOPS[0];
+    return `${s.r}, ${s.g}, ${s.b}`;
+  }
+  if (mag >= COLOR_STOPS[COLOR_STOPS.length - 1].mag) {
+    const s = COLOR_STOPS[COLOR_STOPS.length - 1];
+    return `${s.r}, ${s.g}, ${s.b}`;
+  }
+  for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
+    const a = COLOR_STOPS[i];
+    const b = COLOR_STOPS[i + 1];
+    if (mag >= a.mag && mag <= b.mag) {
+      const t = (mag - a.mag) / (b.mag - a.mag);
+      const r = Math.round(a.r + (b.r - a.r) * t);
+      const g = Math.round(a.g + (b.g - a.g) * t);
+      const bl = Math.round(a.b + (b.b - a.b) * t);
+      return `${r}, ${g}, ${bl}`;
+    }
+  }
+  const s = COLOR_STOPS[COLOR_STOPS.length - 1];
+  return `${s.r}, ${s.g}, ${s.b}`;
+}
+
 function AuraCanvas({
-  focusNearby,
   hoveredId,
   map,
-  nearbyIds,
   overlay,
   earthquakes,
   selectedId,
-  userPoint,
 }) {
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(0);
   const latestStateRef = useRef({
     earthquakes,
-    focusNearby,
     hoveredId,
-    nearbyIds,
     selectedId,
-    userPoint,
   });
 
   useEffect(() => {
     latestStateRef.current = {
       earthquakes,
-      focusNearby,
       hoveredId,
-      nearbyIds,
       selectedId,
-      userPoint,
     };
-  }, [earthquakes, focusNearby, hoveredId, nearbyIds, selectedId, userPoint]);
+  }, [earthquakes, hoveredId, selectedId]);
 
   useEffect(() => {
     if (!map || !overlay) {
@@ -127,23 +152,17 @@ function AuraCanvas({
 
         const isSelected = quake.id === state.selectedId;
         const isHovered = quake.id === state.hoveredId;
-        const isNearby = state.nearbyIds.has(quake.id);
-        const dimmed = state.focusNearby && state.userPoint && !isNearby;
         const pulseCount = isSelected ? 4 : 3;
         const baseRadius = 3 + quake.mag * 1.75;
-        const waveSpan = 26 + quake.mag * 19;
-        const speed = 0.12 + quake.mag * 0.055;
-        const alphaScale = dimmed ? 0.12 : isSelected ? 1.2 : isHovered ? 1.0 : 0.8;
+        const waveSpan = 18 + quake.mag * 12;
+        const speed = 0.045 + quake.mag * 0.02;
+        const alphaScale = isSelected ? 1.2 : isHovered ? 1.0 : 0.8;
 
         let tone;
         if (isSelected) {
-          tone = '249, 115, 22';
-        } else if (quake.mag >= 5) {
-          tone = '239, 68, 68';
-        } else if (quake.mag >= 3) {
-          tone = '250, 204, 21';
+          tone = '255, 255, 255';
         } else {
-          tone = '74, 222, 128';
+          tone = magToColor(quake.mag);
         }
 
         for (let index = 0; index < pulseCount; index += 1) {
@@ -161,14 +180,14 @@ function AuraCanvas({
         }
 
         context.beginPath();
-        context.fillStyle = `rgba(${tone}, ${dimmed ? 0.15 : 0.85})`;
+        context.fillStyle = `rgba(${tone}, 0.85)`;
         context.arc(x, y, isSelected ? 5.5 : 4.2, 0, Math.PI * 2);
         context.fill();
 
         if (isSelected || isHovered) {
           context.beginPath();
           context.lineWidth = 1.6;
-          context.strokeStyle = `rgba(${tone}, ${dimmed ? 0.2 : 0.7})`;
+          context.strokeStyle = `rgba(${tone}, 0.7)`;
           context.arc(x, y, baseRadius + 8, 0, Math.PI * 2);
           context.stroke();
         }

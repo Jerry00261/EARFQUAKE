@@ -1,16 +1,16 @@
-import { mockEarthquakes } from '../data/mockEarthquakes';
+import { allEarthquakes, mockEarthquakes } from '../data/mockEarthquakes';
 
-let nextEarthquakeId = mockEarthquakes.length + 1;
+let nextEarthquakeId = allEarthquakes.length + 1;
 
 const HOTSPOTS = [
-  { place: 'Catalina Fracture', lat: 33.386, lng: -118.416 },
-  { place: 'Hollywood Segment', lat: 34.101, lng: -118.326 },
-  { place: 'Pomona Corridor', lat: 34.055, lng: -117.75 },
-  { place: 'Coachella Shelf', lat: 33.702, lng: -116.233 },
-  { place: 'Salton Trough', lat: 33.245, lng: -115.856 },
-  { place: 'Rancho Cucamonga Front', lat: 34.106, lng: -117.594 },
-  { place: 'Simi Valley Ridge', lat: 34.269, lng: -118.781 },
-  { place: 'La Jolla Canyon', lat: 32.832, lng: -117.271 },
+  { locationId: 'dtla', place: 'Downtown Los Angeles', lat: 34.0522, lng: -118.2437 },
+  { locationId: 'longbeach', place: 'Long Beach Shelf', lat: 33.7701, lng: -118.1937 },
+  { locationId: 'sanbernardino', place: 'San Bernardino Valley', lat: 34.1083, lng: -117.2898 },
+  { locationId: 'palmsprings', place: 'Palm Springs Basin', lat: 33.8303, lng: -116.5453 },
+  { locationId: 'riverside', place: 'Riverside Plain', lat: 33.9806, lng: -117.3755 },
+  { locationId: 'ventura', place: 'Ventura Offshore', lat: 34.2746, lng: -119.229 },
+  { locationId: 'imperial', place: 'Imperial Valley North', lat: 32.8473, lng: -115.5694 },
+  { locationId: 'pasadena', place: 'Pasadena Arc', lat: 34.1478, lng: -118.1445 },
 ];
 
 function delay(milliseconds) {
@@ -34,19 +34,46 @@ function createRandomEarthquake() {
 
   return {
     id: nextEarthquakeId++,
+    locationId: hotspot.locationId,
     place: hotspot.place,
     lat: round(hotspot.lat + latOffset),
     lng: round(hotspot.lng + lngOffset),
     mag: round(magnitude, 1),
+    year: new Date().getFullYear(),
     timestamp: new Date().toISOString(),
   };
 }
 
-export async function getEarthquakes() {
+export async function getEarthquakes(year) {
   await delay(180);
-  return [...mockEarthquakes].sort(
+  const source = year != null
+    ? allEarthquakes.filter((q) => q.year === year)
+    : mockEarthquakes;
+
+  // Group by location, pick strongest event per location
+  const byLocation = new Map();
+  for (const q of source) {
+    const existing = byLocation.get(q.locationId);
+    if (!existing || q.mag > existing.mag) {
+      byLocation.set(q.locationId, q);
+    }
+  }
+
+  return [...byLocation.values()].sort(
     (left, right) => new Date(right.timestamp) - new Date(left.timestamp)
   );
+}
+
+export function getLocationHistory(locationId) {
+  return allEarthquakes
+    .filter((q) => q.locationId === locationId)
+    .sort((a, b) => a.year - b.year);
+}
+
+export function getLocationYearEvents(locationId, year) {
+  return allEarthquakes
+    .filter((q) => q.locationId === locationId && q.year === year)
+    .sort((a, b) => b.mag - a.mag);
 }
 
 export function subscribeToEarthquakeFeed(onEvent, options = {}) {

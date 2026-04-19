@@ -1,7 +1,6 @@
 import {
   startTransition,
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -12,22 +11,21 @@ import DashboardPanel from './components/DashboardPanel';
 import GoogleEarthquakeMap from './components/GoogleEarthquakeMap';
 import {
   getEarthquakes,
+  getLocationHistory,
+  getLocationYearEvents,
   subscribeToEarthquakeFeed,
 } from './services/earthquakeService';
-import { haversineDistanceKm } from './utils/geo';
 
 function App() {
   const [earthquakes, setEarthquakes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [userPoint, setUserPoint] = useState(null);
-  const [distanceThresholdKm, setDistanceThresholdKm] = useState(90);
-  const [sortMode, setSortMode] = useState('distance');
-  const [focusNearby, setFocusNearby] = useState(false);
-  const [liveFeedEnabled, setLiveFeedEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedYear, setSelectedYear] = useState(2026);
+  const [minMag, setMinMag] = useState(0);
+  const selectedLocationRef = useRef(null);
   const mapShellRef = useRef(null);
   const shakeAnimationRef = useRef(null);
 
@@ -37,13 +35,23 @@ function App() {
     async function loadEarthquakes() {
       try {
         setLoading(true);
-        const dataset = await getEarthquakes();
+        const dataset = await getEarthquakes(selectedYear);
 
         if (!isMounted) {
           return;
         }
 
         setEarthquakes(dataset);
+
+        // Re-select same location after year change
+        if (selectedLocationRef.current) {
+          const match = dataset.find(
+            (q) => q.locationId === selectedLocationRef.current
+          );
+          if (match) {
+            setSelectedId(match.id);
+          }
+        }
       } catch (loadError) {
         if (isMounted) {
           setError(loadError.message || 'Unable to load mock earthquakes.');
@@ -60,7 +68,7 @@ function App() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedYear]);
 
   const triggerScreenShake = useCallback((magnitude) => {
     if (magnitude < 3 || !mapShellRef.current) {
@@ -104,10 +112,6 @@ function App() {
   );
 
   useEffect(() => {
-    if (!liveFeedEnabled) {
-      return undefined;
-    }
-
     return subscribeToEarthquakeFeed((incomingQuake) => {
       startTransition(() => {
         setEarthquakes((current) => [incomingQuake, ...current].slice(0, 1500));
@@ -117,110 +121,43 @@ function App() {
         triggerScreenShake(incomingQuake.mag);
       }
     });
-  }, [liveFeedEnabled, triggerScreenShake]);
+  }, [triggerScreenShake]);
+
+  const filteredEarthquakes = useMemo(
+    () => earthquakes.filter((q) => q.mag >= minMag),
+    [earthquakes, minMag]
+  );
 
   const earthquakeMap = useMemo(
-    () => new Map(earthquakes.map((quake) => [quake.id, quake])),
-    [earthquakes]
+    () => new Map(filteredEarthquakes.map((quake) => [quake.id, quake])),
+    [filteredEarthquakes]
   );
 
   const selectedEarthquake = selectedId ? earthquakeMap.get(selectedId) : null;
-  const hoveredEarthquake = hoveredId ? earthquakeMap.get(hoveredId) : null;
 
-  const referencePoint = useMemo(() => {
-    if (userPoint) {
-      return {
-        ...userPoint,
-        label: 'Custom reference point',
-      };
-    }
+  const locationHistory = useMemo(() => {
+    if (!selectedEarthquake) return [];
+    return getLocationHistory(selectedEarthquake.locationId);
+  }, [selectedEarthquake]);
 
-    if (selectedEarthquake) {
-      return {
-        lat: selectedEarthquake.lat,
-        lng: selectedEarthquake.lng,
-        label: 'Selected earthquake',
-      };
-    }
-
-    return null;
-  }, [selectedEarthquake, userPoint]);
-
-  const nearbyEarthquakes = useMemo(() => {
-    const enriched = earthquakes
-      .filter((quake) => {
-        if (!userPoint && selectedEarthquake && quake.id === selectedEarthquake.id) {
-          return false;
-        }
-
-        return true;
-      })
-      .map((quake) => ({
-        ...quake,
-        distanceKm: referencePoint
-          ? haversineDistanceKm(referencePoint, quake)
-          : null,
-      }));
-
-    if (referencePoint) {
-      const withinThreshold = enriched.filter(
-        (quake) => quake.distanceKm !== null && quake.distanceKm <= distanceThresholdKm
-      );
-
-      withinThreshold.sort((left, right) => {
-        if (sortMode === 'magnitude') {
-          return right.mag - left.mag || left.distanceKm - right.distanceKm;
-        }
-
-        return left.distanceKm - right.distanceKm || right.mag - left.mag;
-      });
-
-      return withinThreshold;
-    }
-
-    const ranked = [...enriched];
-    ranked.sort((left, right) => right.mag - left.mag);
-    return ranked;
-  }, [distanceThresholdKm, earthquakes, referencePoint, selectedEarthquake, sortMode, userPoint]);
-
-  const deferredNearbyEarthquakes = useDeferredValue(nearbyEarthquakes);
-
-  const nearbyIds = useMemo(
-    () => new Set(nearbyEarthquakes.map((quake) => quake.id)),
-    [nearbyEarthquakes]
-  );
-
-  const strongestNearby = useMemo(() => {
-    return nearbyEarthquakes.reduce((top, quake) => {
-      if (!top || quake.mag > top.mag) {
-        return quake;
-      }
-
-      return top;
-    }, null);
-  }, [nearbyEarthquakes]);
-
-  const selectedDistanceKm =
-    userPoint && selectedEarthquake
-      ? haversineDistanceKm(userPoint, selectedEarthquake)
-      : null;
-
-  const summary = useMemo(() => {
-    const totalMagnitude = earthquakes.reduce((sum, quake) => sum + quake.mag, 0);
-    const highMagnitudeCount = earthquakes.filter((quake) => quake.mag >= 5).length;
-
-    return {
-      count: earthquakes.length,
-      highMagnitudeCount,
-      averageMagnitude:
-        earthquakes.length > 0 ? totalMagnitude / earthquakes.length : 0,
-    };
-  }, [earthquakes]);
+  const yearEvents = useMemo(() => {
+    if (!selectedEarthquake) return [];
+    return getLocationYearEvents(selectedEarthquake.locationId, selectedYear);
+  }, [selectedEarthquake, selectedYear]);
 
   const handleSelectEarthquake = useCallback(
     (quakeId) => {
+      if (quakeId == null) {
+        setSelectedId(null);
+        selectedLocationRef.current = null;
+        setPanelOpen(false);
+        return;
+      }
       const quake = earthquakeMap.get(quakeId);
       setSelectedId(quakeId);
+      if (quake) {
+        selectedLocationRef.current = quake.locationId;
+      }
       setPanelOpen(true);
 
       if (quake) {
@@ -234,15 +171,6 @@ function App() {
     setHoveredId(quakeId);
   }, []);
 
-  const handleUserPointChange = useCallback((nextPoint) => {
-    setUserPoint(nextPoint);
-    setFocusNearby(true);
-  }, []);
-
-  const handleClearUserPoint = useCallback(() => {
-    setUserPoint(null);
-  }, []);
-
   const handleClosePanel = useCallback(() => {
     setPanelOpen(false);
   }, []);
@@ -252,44 +180,28 @@ function App() {
       <div className="app-frame">
         <div className={`map-shell${panelOpen ? ' panel-open' : ''}`} ref={mapShellRef}>
           <GoogleEarthquakeMap
-            earthquakes={earthquakes}
-            focusNearby={focusNearby}
+            earthquakes={filteredEarthquakes}
             hoveredId={hoveredId}
             loading={loading}
-            nearbyIds={nearbyIds}
+            minMag={minMag}
             onHover={handleHoverEarthquake}
+            onMinMagChange={setMinMag}
             onSelect={handleSelectEarthquake}
-            onUserPointChange={handleUserPointChange}
+            onYearChange={setSelectedYear}
             panelOpen={panelOpen}
             selectedEarthquake={selectedEarthquake}
             selectedId={selectedId}
-            userPoint={userPoint}
+            selectedYear={selectedYear}
           />
         </div>
 
         <DashboardPanel
-          deferredNearbyEarthquakes={deferredNearbyEarthquakes}
-          distanceThresholdKm={distanceThresholdKm}
-          error={error}
-          focusNearby={focusNearby}
-          hoveredEarthquake={hoveredEarthquake}
-          liveFeedEnabled={liveFeedEnabled}
-          loading={loading}
-          onClearUserPoint={handleClearUserPoint}
+          locationHistory={locationHistory}
           onClose={handleClosePanel}
-          onSelectEarthquake={handleSelectEarthquake}
-          onSetDistanceThresholdKm={setDistanceThresholdKm}
-          onSetFocusNearby={setFocusNearby}
-          onSetLiveFeedEnabled={setLiveFeedEnabled}
-          onSetSortMode={setSortMode}
           panelOpen={panelOpen}
-          referencePoint={referencePoint}
-          selectedDistanceKm={selectedDistanceKm}
           selectedEarthquake={selectedEarthquake}
-          sortMode={sortMode}
-          strongestNearby={strongestNearby}
-          summary={summary}
-          userPoint={userPoint}
+          selectedYear={selectedYear}
+          yearEvents={yearEvents}
         />
       </div>
     </div>

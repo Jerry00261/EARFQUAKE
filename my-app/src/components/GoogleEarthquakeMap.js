@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuraCanvas from './AuraCanvas';
 import { useGoogleMapsApi } from '../hooks/useGoogleMapsApi';
 
@@ -60,41 +60,61 @@ function findIntersectingEarthquake(event, container, overlay, earthquakes) {
 
 function GoogleEarthquakeMap({
   earthquakes,
-  focusNearby,
   hoveredId,
   loading,
-  nearbyIds,
+  minMag,
   onHover,
+  onMinMagChange,
   onSelect,
-  onUserPointChange,
+  onYearChange,
   panelOpen,
   selectedEarthquake,
   selectedId,
-  userPoint,
+  selectedYear,
 }) {
   const { status, error } = useGoogleMapsApi();
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
-  const markerRef = useRef(null);
   const listenersRef = useRef([]);
   const [streetViewActive, setStreetViewActive] = useState(false);
   const latestStateRef = useRef({
     earthquakes,
     onHover,
     onSelect,
-    onUserPointChange,
   });
   const [overlayReady, setOverlayReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const playIntervalRef = useRef(null);
+
+  const togglePlay = useCallback(() => {
+    setPlaying((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (playing) {
+      playIntervalRef.current = window.setInterval(() => {
+        onYearChange((prev) => {
+          if (prev >= 2026) {
+            setPlaying(false);
+            return 2000;
+          }
+          return prev + 1;
+        });
+      }, 800);
+    } else {
+      window.clearInterval(playIntervalRef.current);
+    }
+    return () => window.clearInterval(playIntervalRef.current);
+  }, [playing, onYearChange]);
 
   useEffect(() => {
     latestStateRef.current = {
       earthquakes,
       onHover,
       onSelect,
-      onUserPointChange,
     };
-  }, [earthquakes, onHover, onSelect, onUserPointChange]);
+  }, [earthquakes, onHover, onSelect]);
 
   useEffect(() => {
     if (status !== 'loaded' || mapRef.current || !mapNodeRef.current) {
@@ -126,7 +146,7 @@ function GoogleEarthquakeMap({
 
     map.setOptions({
       streetViewControlOptions: {
-        position: window.google.maps.ControlPosition.RIGHT_BOTTOM,
+        position: window.google.maps.ControlPosition.LEFT_BOTTOM,
       },
     });
 
@@ -153,9 +173,9 @@ function GoogleEarthquakeMap({
         const dropPos = sv.getPosition();
         if (!dropPos) return;
 
-        // Find nearest panorama within 500m
+        // Find nearest panorama within 50m — reject if too far for accuracy
         svService.getPanorama(
-          { location: dropPos, radius: 500, source: window.google.maps.StreetViewSource.OUTDOOR },
+          { location: dropPos, radius: 50, source: window.google.maps.StreetViewSource.OUTDOOR },
           (data, svStatus) => {
             if (svStatus === window.google.maps.StreetViewStatus.OK) {
               svVerified = true;
@@ -182,12 +202,6 @@ function GoogleEarthquakeMap({
     return () => {
       listenersRef.current.forEach((listener) => listener.remove());
       listenersRef.current = [];
-
-      if (markerRef.current) {
-        window.google.maps.event.clearInstanceListeners(markerRef.current);
-        markerRef.current.setMap(null);
-        markerRef.current = null;
-      }
 
       if (overlayRef.current) {
         overlayRef.current.setMap(null);
@@ -241,12 +255,8 @@ function GoogleEarthquakeMap({
           return;
         }
 
-        if (event.latLng) {
-          latestStateRef.current.onUserPointChange({
-            lat: event.latLng.lat(),
-            lng: event.latLng.lng(),
-          });
-        }
+        // Clicked outside any point — deselect
+        latestStateRef.current.onSelect(null);
       }),
     ];
 
@@ -255,47 +265,6 @@ function GoogleEarthquakeMap({
       listenersRef.current = [];
     };
   }, [overlayReady]);
-
-  useEffect(() => {
-    if (!mapRef.current || status !== 'loaded' || !window.google?.maps) {
-      return undefined;
-    }
-
-    if (!markerRef.current) {
-      markerRef.current = new window.google.maps.Marker({
-        draggable: true,
-        map: null,
-        zIndex: 100,
-        title: 'Reference point',
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 7,
-          fillColor: '#ef6c00',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2,
-        },
-      });
-
-      markerRef.current.addListener('dragend', (event) => {
-        if (event.latLng) {
-          onUserPointChange({
-            lat: event.latLng.lat(),
-            lng: event.latLng.lng(),
-          });
-        }
-      });
-    }
-
-    if (userPoint) {
-      markerRef.current.setMap(mapRef.current);
-      markerRef.current.setPosition(userPoint);
-    } else {
-      markerRef.current.setMap(null);
-    }
-
-    return undefined;
-  }, [onUserPointChange, status, userPoint]);
 
   useEffect(() => {
     if (!mapRef.current || !selectedEarthquake) {
@@ -341,13 +310,10 @@ function GoogleEarthquakeMap({
       {status === 'loaded' && overlayReady && !streetViewActive ? (
         <AuraCanvas
           earthquakes={earthquakes}
-          focusNearby={focusNearby}
           hoveredId={hoveredId}
           map={mapRef.current}
-          nearbyIds={nearbyIds}
           overlay={overlayRef.current}
           selectedId={selectedId}
-          userPoint={userPoint}
         />
       ) : null}
 
@@ -356,8 +322,8 @@ function GoogleEarthquakeMap({
         <div className="map-badge">
           <h1>Earthquake Visualization Dashboard</h1>
           <p>
-            Click an epicenter to inspect it, then click the map to drop a custom
-            marker and explore nearby seismic activity.
+            Click an epicenter to inspect its magnitude, coordinates,
+            and event details.
           </p>
         </div>
 
@@ -373,21 +339,16 @@ function GoogleEarthquakeMap({
       {!streetViewActive && (
       <div className="map-legend">
         <div className="legend-title">Severity</div>
-        <div className="legend-row">
-          <span className="legend-dot" data-tone="low" />
-          <span className="legend-ring" data-tone="low" />
-          <span className="legend-label">Low (M &lt; 3)</span>
+        <div className="legend-gradient-bar" />
+        <div className="legend-gradient-labels">
+          <span>0</span>
+          <span>1.5</span>
+          <span>3</span>
+          <span>4.5</span>
+          <span>6</span>
+          <span>7+</span>
         </div>
-        <div className="legend-row">
-          <span className="legend-dot" data-tone="mid" />
-          <span className="legend-ring" data-tone="mid" />
-          <span className="legend-label">Moderate (M 3–5)</span>
-        </div>
-        <div className="legend-row">
-          <span className="legend-dot" data-tone="high" />
-          <span className="legend-ring" data-tone="high" />
-          <span className="legend-label">Severe (M 5+)</span>
-        </div>
+        <div className="legend-gradient-caption">Magnitude</div>
         <div className="legend-divider" />
         <div className="legend-row">
           <span className="legend-dot" data-tone="selected" />
@@ -396,12 +357,56 @@ function GoogleEarthquakeMap({
         </div>
         <div className="legend-row">
           <span className="legend-dot" data-tone="dimmed" />
-          <span className="legend-label">Outside threshold</span>
+          <span className="legend-label">Other events</span>
         </div>
-        <div className="legend-divider" />
-        <div className="legend-row">
-          <span className="legend-marker" />
-          <span className="legend-label">Reference marker</span>
+      </div>
+      )}
+
+      {!streetViewActive && (
+      <div className="year-slider-container">
+        <div className="year-slider-header">
+          <div className="year-slider-left">
+            <button
+              className={`year-play-btn${playing ? ' playing' : ''}`}
+              onClick={togglePlay}
+              title={playing ? 'Pause' : 'Play'}
+            >
+              {playing ? '❚❚' : '▶'}
+            </button>
+            <label>Year</label>
+          </div>
+          <span className="year-value">{selectedYear}</span>
+        </div>
+        <input
+          type="range"
+          min={2000}
+          max={2026}
+          step={1}
+          value={selectedYear}
+          onChange={(e) => onYearChange(Number(e.target.value))}
+        />
+        <div className="year-slider-bounds">
+          <span>2000</span>
+          <span>2026</span>
+        </div>
+
+        <div className="mag-filter-divider" />
+
+        <div className="year-slider-header">
+          <label>Min Magnitude</label>
+          <span className="year-value">{minMag.toFixed(1)}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={7}
+          step={0.5}
+          value={minMag}
+          onChange={(e) => onMinMagChange(Number(e.target.value))}
+        />
+        <div className="year-slider-bounds">
+          <span>0</span>
+          <span>7+</span>
         </div>
       </div>
       )}
