@@ -2,6 +2,20 @@ import { memo, useEffect, useRef } from 'react';
 
 const PADDING = 200;
 
+function getAuraProfile(mag) {
+  const safeMag = Number.isFinite(mag) ? Math.max(0, Math.min(mag, 7.5)) : 0;
+  const normalized = safeMag / 7.5;
+  // Ease-in scaling keeps low-magnitude quakes tighter and caps extreme growth.
+  const sizeFactor = normalized ** 1.15;
+
+  return {
+    safeMag,
+    baseRadius: 2.2 + sizeFactor * 8.2,
+    waveSpan: 10 + sizeFactor * 52,
+    speed: 0.045 + sizeFactor * 0.12,
+  };
+}
+
 // Continuous green → yellow → orange → red → dark red scale
 const COLOR_STOPS = [
   { mag: 0, r: 74, g: 222, b: 128 },   // green
@@ -153,9 +167,7 @@ function AuraCanvas({
         const isSelected = quake.id === state.selectedId;
         const isHovered = quake.id === state.hoveredId;
         const pulseCount = isSelected ? 4 : 3;
-        const baseRadius = 3 + quake.mag * 1.75;
-        const waveSpan = 18 + quake.mag * 12;
-        const speed = 0.045 + quake.mag * 0.02;
+        const { safeMag, baseRadius, waveSpan, speed } = getAuraProfile(quake.mag);
         const alphaScale = isSelected ? 1.2 : isHovered ? 1.0 : 0.8;
 
         let tone;
@@ -170,7 +182,7 @@ function AuraCanvas({
           const eased = 1 - (1 - progress) ** 3;
           const radius = baseRadius + waveSpan * eased * (isHovered ? 1.08 : 1);
           const opacity =
-            ((1 - eased) ** 1.8 * (0.34 + quake.mag * 0.035) + 0.015) * alphaScale;
+            ((1 - eased) ** 1.8 * (0.34 + safeMag * 0.035) + 0.015) * alphaScale;
 
           context.beginPath();
           context.lineWidth = isSelected ? 2.4 : isHovered ? 2 : 1.4;
