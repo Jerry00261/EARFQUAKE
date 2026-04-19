@@ -260,7 +260,7 @@ function GoogleEarthquakeMap({
       {!streetViewActive && (
         <div className="map-overlay">
         <div className="map-badge">
-          <h1>Earthquake Visualization Dashboard</h1>
+          <h1>Explorer</h1>
           <p>
             Click an epicenter to inspect its magnitude, coordinates,
             and event details.

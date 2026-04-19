@@ -414,6 +414,7 @@ function App() {
         >
           Seismic Risk
         </button>
+        <span className="app-nav-title">EARFQUAKE</span>
       </nav>
 
       <div className="app-frame">
