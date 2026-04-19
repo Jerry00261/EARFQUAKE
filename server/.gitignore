@@ -19,3 +19,5 @@ server/app/ml/heatmap.json
 node_modules/
 my-app/node_modules/
 my-app/build/
+.env
+server/.env
