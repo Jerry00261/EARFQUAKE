@@ -1,8 +1,17 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.db.mongo import close_mongo
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    close_mongo()
 
 
 def create_app() -> FastAPI:
@@ -10,6 +19,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="Backend API for the earthquake visualization dashboard.",
+        lifespan=lifespan,
     )
 
     application.add_middleware(

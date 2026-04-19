@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
+from app.schemas.health import HealthResponse
+
 router = APIRouter()
 
 
-@router.get("/health")
-async def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "earthquake-backend"}
+@router.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    return HealthResponse(status="ok", service="earthquake-backend")
