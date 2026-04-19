@@ -1,5 +1,4 @@
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const API_PREFIX = '/api/v1';
+const API = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 function mapEarthquake(item) {
   return {
@@ -22,7 +21,7 @@ function mapEarthquake(item) {
 }
 
 export async function getEarthquakes(year) {
-  let url = `${API_BASE}${API_PREFIX}/earthquakes?sort_by=time`;
+  let url = `${API}/earthquakes?sort_by=time`;
   if (year != null) {
     url += `&year=${year}`;
   }
@@ -50,7 +49,7 @@ export async function getEarthquakes(year) {
 }
 
 export async function getAllEarthquakes() {
-  const url = `${API_BASE}${API_PREFIX}/earthquakes?limit=20000&sort_by=time`;
+  const url = `${API}/earthquakes?limit=20000&sort_by=time`;
   const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch all earthquakes');
   const data = await response.json();
@@ -59,7 +58,7 @@ export async function getAllEarthquakes() {
 
 export async function getLocationHistory(locationId) {
   const response = await fetch(
-    `${API_BASE}${API_PREFIX}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=time`
+    `${API}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=time`
   );
   if (!response.ok) throw new Error('Failed to fetch location history');
   const data = await response.json();
@@ -68,7 +67,7 @@ export async function getLocationHistory(locationId) {
 }
 
 export async function getLocationYearEvents(locationId, year) {
-  let url = `${API_BASE}${API_PREFIX}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=magnitude`;
+  let url = `${API}/earthquakes?place=${encodeURIComponent(locationId)}&sort_by=magnitude`;
   if (year != null) {
     url += `&year=${year}`;
   }
