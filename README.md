@@ -10,23 +10,40 @@ A full-stack earthquake visualization and seismic risk prediction platform focus
 - **Seismic Risk Map** — Precomputed risk heatmap overlaid on a map. Click any point in California to receive a risk-tier classification, estimated peak ground acceleration (PGA), Vs30 site velocity, and fault distance.
 - **Waveform Viewer** — Synthetic seismograms generated on demand using a Reduced Order Model (ROM) built from SVD decomposition of a 16-receiver simulation dataset. Output is scaled to pixel displacement for animated ground-shaking visualization.
 - **State Analytics Panel** — Aggregated statistics including event counts, magnitude distribution histograms, and per-location breakdowns.
-- **Dashboard Panel** — Summary metrics and live earthquake feed subscription.
+- **Dashboard Panel** — Summary metrics and per-year earthquake statistics.
 
 ---
 
 ## Architecture
 
 ```
-my-app/          React 19 single-page application
-server/          FastAPI REST API + ML inference
+my-app/
+  src/
+    components/        AuraCanvas, DashboardPanel, GoogleEarthquakeMap,
+                       Histogram, PredictionPanel, SeismicRiskMap,
+                       StateAnalyticsPanel, WaveformChart
+    hooks/             useGoogleMapsApi.js
+    services/          earthquakeService.js, seismicService.js
+    utils/             geo.js
+    data/              mockEarthquakes.js
+  scripts/             run-react-with-root-env.js
+
+server/
   app/
-    api/         Route handlers (earthquakes, predict, datasets, health)
-    core/        Configuration and settings
-    db/          MongoDB connection and seeding scripts
-    ml/          Trained models, GMPE, ROM, and lookup tables
-  data/          Raw training data (CSV, NumPy arrays)
-  scripts/       Data generation and database seeding utilities
-  tests/         Pytest integration tests
+    api/
+      routes/          earthquakes.py, predict.py, datasets.py, health.py
+      router.py
+    core/              config.py
+    db/                mongo.py, seed.py
+    ml/                model.py, rom.py, gmpe.py, lookups.py, heatmap.json
+    schemas/           earthquake.py, predict.py, dataset.py, health.py
+    main.py
+  data/                california_earthquakes.csv,
+                       seismos_16_receivers.npy, source_locations.csv
+  scripts/             seed_mongo.py, generate_heatmap.py, test_mongo.py
+  tests/               test_app.py
+  requirements.txt
+  render.yaml
 ```
 
 ---
@@ -60,13 +77,17 @@ A 16-receiver velocity dataset (`seismos_16_receivers.npy`, shape 16 x 600 x 500
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/api/v1/health` | Health check |
 | GET | `/api/v1/earthquakes` | List earthquakes with optional filters |
 | GET | `/api/v1/earthquakes/summary` | Aggregated stats for a given year |
-| GET | `/api/v1/predict/predict` | Risk tier + PGA for a lat/lon |
-| GET | `/api/v1/predict/heatmap` | Precomputed statewide risk heatmap |
-| GET | `/api/v1/predict/waveform` | Scaled pixel displacement waveform |
-| GET | `/api/v1/predict/seismogram` | Full synthetic seismogram |
-| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/ml/predict` | Risk tier + PGA for a lat/lon |
+| GET | `/api/v1/ml/heatmap` | Precomputed statewide risk heatmap |
+| GET | `/api/v1/ml/waveform` | Scaled pixel displacement waveform |
+| GET | `/api/v1/ml/seismogram` | Full synthetic seismogram |
+| GET | `/api/v1/datasets` | Dataset catalog with collection counts |
+| GET | `/api/v1/datasets/source-locations` | List ROM source locations |
+| GET | `/api/v1/datasets/receivers` | List receiver summaries |
+| GET | `/api/v1/datasets/receivers/{receiver_index}` | Get full receiver waveform data |
 
 ---
 
